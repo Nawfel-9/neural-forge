@@ -1,3 +1,17 @@
+"""
+main.py
+=======
+Application entry point.
+
+Launches the 3-window pipeline:
+  Window 1  (Data)  →  Window 2  (Model)  →  Window 3  (Training)
+
+Currently wired: Window 1 ↔ Window 2.
+Window 3 is stubbed for Phase 4+.
+"""
+
+from __future__ import annotations
+
 import sys
 from PyQt6.QtWidgets import (QApplication, QWidget, QVBoxLayout, 
                              QHBoxLayout, QPushButton, QLabel)
