@@ -1,0 +1,7 @@
+PyQt6>=6.6
+torch>=2.2 # if using gpu comment this out and run the right command from https://pytorch.org/get-started/locally/
+pandas>=2.1
+pyqtgraph>=0.13
+psutil>=5.9
+scikit-learn>=1.4
+onnx>=1.15
