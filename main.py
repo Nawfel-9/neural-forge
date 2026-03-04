@@ -13,23 +13,26 @@ Window 3 is stubbed for Phase 4+.
 from __future__ import annotations
 
 import sys
-from PyQt6.QtWidgets import (QApplication, QWidget, QVBoxLayout, 
-                             QHBoxLayout, QPushButton, QLabel)
+from PyQt6.QtWidgets import (QApplication, QWidget, QVBoxLayout,
+                             QHBoxLayout, QPushButton, QLabel,
+                             QFileDialog, QDialog)
 from PyQt6.QtCore import Qt
 
 from ui.styles import DARK_QSS, apply_dark_palette
 from ui.window_data import DataWindow
 from ui.window_model import ModelBuilderWindow
+from ui.window_project_guide import ProjectGuideDialog   # ← NEW
 from utils.project_state import ProjectState
 
-# --- New Home Window Component ---
+
+# --- Home Window Component ---
 class HomeWindow(QWidget):
     """Entry point for the application."""
     def __init__(self, on_no_code, on_import_code):
         super().__init__()
         self.setWindowTitle("VisionHub - Select Workspace")
         self.setMinimumSize(600, 400)
-        
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(50, 50, 50, 50)
         layout.setSpacing(30)
@@ -39,15 +42,12 @@ class HomeWindow(QWidget):
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(title)
 
-        # Container for the two main options
         btn_layout = QHBoxLayout()
-        
-        # Option 1: No-Code (For your friend's part)
+
         self.btn_no_code = QPushButton("No-Code Pipeline\n(Beginner Friendly)")
         self.btn_no_code.setFixedSize(220, 150)
         self.btn_no_code.clicked.connect(on_no_code)
-        
-        # Option 2: Code Part (For your part)
+
         self.btn_code = QPushButton("Import Project\n(Developer Mode)")
         self.btn_code.setFixedSize(220, 150)
         self.btn_code.clicked.connect(on_import_code)
@@ -61,7 +61,8 @@ class HomeWindow(QWidget):
         subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(subtitle)
 
-# --- Updated Controller ---
+
+# --- Controller ---
 class PipelineController:
     """
     Manages transitions between the Home Screen and the different
@@ -73,22 +74,19 @@ class PipelineController:
         self._home_win: HomeWindow | None = None
         self._win_data: DataWindow | None = None
         self._win_model: ModelBuilderWindow | None = None
-        # self._win_code_editor: CodeEditorWindow | None = None # Placeholder for your part
 
     def start(self) -> None:
-        """Show the Home Page first."""
         self._home_win = HomeWindow(
             on_no_code=self._start_no_code_pipeline,
-            on_import_code=self._open_code_editor
+            on_import_code=self._open_code_editor,
         )
         self._home_win.show()
 
     # ── Path 1: No-Code Pipeline ──────────────────────────────────────────
     def _start_no_code_pipeline(self) -> None:
-        """Transitions to the Data Window (Step 1 of the pipeline)."""
         if self._home_win:
             self._home_win.hide()
-            
+
         self._win_data = DataWindow(
             project_state=self.state,
             on_next=self._open_model_window,
@@ -112,27 +110,44 @@ class PipelineController:
         if self._win_data:
             self._win_data.show()
 
-    # ── Path 2: Code/Import Project ───────────────────────────────────────
+    # ── Path 2: Import Project ────────────────────────────────────────────
     def _open_code_editor(self) -> None:
-        """Triggered when user wants to import/write code."""
-        print("Logic for importing a project and opening the code editor goes here...")
-        # Example:
+        """
+        1. Show the Project Structure Guide (unless suppressed).
+        2. If the user confirms, open a folder-picker dialog.
+        3. Hand the selected path to the CodeEditorWindow (placeholder).
+        """
+        # Step 1 — show guide if not suppressed
+        if ProjectGuideDialog.should_show():
+            dlg = ProjectGuideDialog(parent=self._home_win)
+            if dlg.exec() != QDialog.DialogCode.Accepted:
+                return   # user cancelled
+
+        # Step 2 — folder picker
+        project_dir = QFileDialog.getExistingDirectory(
+            self._home_win,
+            "Select your project folder",
+            "",
+            QFileDialog.Option.ShowDirsOnly,
+        )
+        if not project_dir:
+            return   # user cancelled folder picker
+
+        # Step 3 — hand off to CodeEditorWindow (implement when ready)
+        print(f"[Developer Mode] Project folder selected: {project_dir}")
         # self._home_win.hide()
-        # self._win_code_editor = CodeEditorWindow(state=self.state)
+        # self._win_code_editor = CodeEditorWindow(state=self.state, project_dir=project_dir)
         # self._win_code_editor.show()
 
 
 def main() -> None:
     app = QApplication(sys.argv)
 
-    # Apply dark theme
     apply_dark_palette(app)
     app.setStyleSheet(DARK_QSS)
 
-    # Shared state
     state = ProjectState()
 
-    # Launch application
     controller = PipelineController(state)
     controller.start()
 
