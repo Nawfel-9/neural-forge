@@ -43,7 +43,7 @@ Built with **PyQt6** (dark-themed UI) and **PyTorch** (ML backend), following a 
 
 ```bash
 # Clone the repository
-git clone <repo-url>
+git clone https://github.com/Nawfel-9/neural-forge
 cd neural-forge
 
 # Install dependencies
