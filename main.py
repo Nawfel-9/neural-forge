@@ -1,51 +1,87 @@
-"""
-main.py
-=======
-Application entry point.
-
-Launches the 3-window pipeline:
-  Window 1  (Data)  →  Window 2  (Model)  →  Window 3  (Training)
-
-Currently wired: Window 1 ↔ Window 2.
-Window 3 is stubbed for Phase 4+.
-"""
-
-from __future__ import annotations
-
 import sys
-
-from PyQt6.QtWidgets import QApplication
+from PyQt6.QtWidgets import (QApplication, QWidget, QVBoxLayout, 
+                             QHBoxLayout, QPushButton, QLabel)
+from PyQt6.QtCore import Qt
 
 from ui.styles import DARK_QSS, apply_dark_palette
 from ui.window_data import DataWindow
 from ui.window_model import ModelBuilderWindow
 from utils.project_state import ProjectState
 
+# --- New Home Window Component ---
+class HomeWindow(QWidget):
+    """Entry point for the application."""
+    def __init__(self, on_no_code, on_import_code):
+        super().__init__()
+        self.setWindowTitle("VisionHub - Select Workspace")
+        self.setMinimumSize(600, 400)
+        
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(50, 50, 50, 50)
+        layout.setSpacing(30)
 
+        title = QLabel("Welcome to CV Trainer")
+        title.setStyleSheet("font-size: 24px; font-weight: bold; color: #ffffff;")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(title)
+
+        # Container for the two main options
+        btn_layout = QHBoxLayout()
+        
+        # Option 1: No-Code (For your friend's part)
+        self.btn_no_code = QPushButton("No-Code Pipeline\n(Beginner Friendly)")
+        self.btn_no_code.setFixedSize(220, 150)
+        self.btn_no_code.clicked.connect(on_no_code)
+        
+        # Option 2: Code Part (For your part)
+        self.btn_code = QPushButton("Import Project\n(Developer Mode)")
+        self.btn_code.setFixedSize(220, 150)
+        self.btn_code.clicked.connect(on_import_code)
+
+        btn_layout.addWidget(self.btn_no_code)
+        btn_layout.addWidget(self.btn_code)
+        layout.addLayout(btn_layout)
+
+        subtitle = QLabel("Monitor hardware usage & model performance in real-time.")
+        subtitle.setStyleSheet("color: #aaaaaa; font-style: italic;")
+        subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(subtitle)
+
+# --- Updated Controller ---
 class PipelineController:
     """
-    Manages window transitions: Data → Model → Training.
-
-    Each window receives the shared ProjectState and callbacks for
-    forward/backward navigation.
+    Manages transitions between the Home Screen and the different
+    workflow modules (No-Code vs Code-Centric).
     """
 
     def __init__(self, state: ProjectState) -> None:
         self.state = state
+        self._home_win: HomeWindow | None = None
         self._win_data: DataWindow | None = None
         self._win_model: ModelBuilderWindow | None = None
+        # self._win_code_editor: CodeEditorWindow | None = None # Placeholder for your part
 
     def start(self) -> None:
-        """Show Window 1 (Data)."""
+        """Show the Home Page first."""
+        self._home_win = HomeWindow(
+            on_no_code=self._start_no_code_pipeline,
+            on_import_code=self._open_code_editor
+        )
+        self._home_win.show()
+
+    # ── Path 1: No-Code Pipeline ──────────────────────────────────────────
+    def _start_no_code_pipeline(self) -> None:
+        """Transitions to the Data Window (Step 1 of the pipeline)."""
+        if self._home_win:
+            self._home_win.hide()
+            
         self._win_data = DataWindow(
             project_state=self.state,
             on_next=self._open_model_window,
         )
         self._win_data.show()
 
-    # ── Transitions ─────────────────────────────────────────────────────────
     def _open_model_window(self) -> None:
-        """Called when Window 1 clicks 'Next →'."""
         if self._win_data:
             self._win_data.hide()
 
@@ -56,13 +92,20 @@ class PipelineController:
         self._win_model.show()
 
     def _back_to_data(self) -> None:
-        """Called when Window 2 clicks '← Back'."""
         if self._win_model:
             self._win_model.close()
             self._win_model = None
-
         if self._win_data:
             self._win_data.show()
+
+    # ── Path 2: Code/Import Project ───────────────────────────────────────
+    def _open_code_editor(self) -> None:
+        """Triggered when user wants to import/write code."""
+        print("Logic for importing a project and opening the code editor goes here...")
+        # Example:
+        # self._home_win.hide()
+        # self._win_code_editor = CodeEditorWindow(state=self.state)
+        # self._win_code_editor.show()
 
 
 def main() -> None:
@@ -75,7 +118,7 @@ def main() -> None:
     # Shared state
     state = ProjectState()
 
-    # Launch pipeline
+    # Launch application
     controller = PipelineController(state)
     controller.start()
 
