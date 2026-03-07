@@ -1,6 +1,6 @@
-# 🧠 Neural Network Builder
+# 🧠 Neural Forge
 
-> A low-code/no-code desktop application for building, training, and visualising neural networks — without writing a single line of code.
+> A dual-path desktop app for building, training, and monitoring neural networks — **No-Code** for beginners, **Developer Mode** for experienced users who bring their own PyTorch project.
 
 Built with **PyQt6** (dark-themed UI) and **PyTorch** (ML backend), following a decoupled architecture where the visual UI acts purely as a configuration generator and the ML engine operates independently from a standardised blueprint.
 
@@ -10,7 +10,8 @@ Built with **PyQt6** (dark-themed UI) and **PyTorch** (ML backend), following a 
 
 | Feature | Status |
 |---|---|
-| Dark-themed 3-window pipeline (Data → Model → Training) | ✅ |
+| Home Screen with No-Code + Developer Mode paths | ✅ |
+| Dark-themed pipeline (Data → Model → Training) | ✅ |
 | CSV loading with auto-detection of columns and NaN handling | ✅ |
 | 5-row data preview in a table view | ✅ |
 | Target column picker (defaults to last column) | ✅ |
@@ -27,6 +28,11 @@ Built with **PyQt6** (dark-themed UI) and **PyTorch** (ML backend), following a 
 | Real-time loss curve (pyqtgraph) | 🔜 Phase 5 |
 | CPU/RAM/VRAM resource monitor | 🔜 Phase 5 |
 | ONNX model export | 🔜 Phase 5 |
+| **Developer Mode** | |
+| Project import with folder picker | ✅ |
+| Project structure guide dialog (Don't show again) | ✅ |
+| `config.yaml` bridge (UI → scripts) | ✅ |
+| Code editor / training integration | 🔜 |
 
 ---
 
@@ -64,7 +70,7 @@ python main.py
 python -m pytest tests/ -v
 ```
 
-**Current test results: 52/52 passing** (28 Phase 1 + 24 Phase 2)
+**Current test results: 80/80 passing** (28 Phase 1 + 24 Phase 2 + 28 Phase 3)
 
 ---
 
@@ -78,6 +84,7 @@ python -m pytest tests/ -v
 │   ├── styles.py              # Dark theme (QPalette + QSS)
 │   ├── window_data.py         # Window 1: Data loading & preprocessing
 │   ├── window_model.py        # Window 2: Sequential model builder
+│   ├── window_project_guide.py # Dev Mode: onboarding / structure guide
 │   ├── layer_row.py           # Custom widget: one layer row
 │   └── data_table_view.py     # QTableView wrapper for DataFrames
 │
@@ -103,7 +110,8 @@ python -m pytest tests/ -v
     ├── architecture.md
     ├── walkthrough_phase1.md
     ├── walkthrough_phase2.md
-    └── walkthrough_phase3.md
+    ├── walkthrough_phase3.md
+    └── walkthrough_dev_mode.md
 ```
 
 ---
@@ -116,6 +124,7 @@ python -m pytest tests/ -v
 | [Phase 1 Walkthrough](docs/walkthrough_phase1.md) | Layer builder UI, blueprint save/load, validation — every function explained |
 | [Phase 2 Walkthrough](docs/walkthrough_phase2.md) | Data loading, cleaning, splitting, table preview — every function explained |
 | [Phase 3 Walkthrough](docs/walkthrough_phase3.md) | Blueprint → nn.Sequential, LazyLinear, ghost run — every function explained |
+| [Dev Mode Walkthrough](docs/walkthrough_dev_mode.md) | HomeWindow, ProjectGuideDialog, config.yaml bridge, dual-path architecture |
 
 ---
 

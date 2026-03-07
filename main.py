@@ -3,11 +3,13 @@ main.py
 =======
 Application entry point.
 
-Launches the 3-window pipeline:
-  Window 1  (Data)  →  Window 2  (Model)  →  Window 3  (Training)
+Offers two workflow paths from a Home Screen:
+  Path 1 — No-Code Pipeline: Window 1 (Data) → Window 2 (Model) → Window 3 (Training)
+  Path 2 — Developer Mode:   Import existing PyTorch project → shared Training window
 
-Currently wired: Window 1 ↔ Window 2.
-Window 3 is stubbed for Phase 4+.
+Currently wired:
+  Path 1: Window 1 ↔ Window 2 (Window 3 stubbed for Phase 4+)
+  Path 2: Home → Guide dialog → folder picker (code editor stubbed)
 """
 
 from __future__ import annotations
@@ -30,14 +32,14 @@ class HomeWindow(QWidget):
     """Entry point for the application."""
     def __init__(self, on_no_code, on_import_code):
         super().__init__()
-        self.setWindowTitle("VisionHub - Select Workspace")
+        self.setWindowTitle("Neural Forge — Select Workspace")
         self.setMinimumSize(600, 400)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(50, 50, 50, 50)
         layout.setSpacing(30)
 
-        title = QLabel("Welcome to CV Trainer")
+        title = QLabel("Welcome to Neural Forge")
         title.setStyleSheet("font-size: 24px; font-weight: bold; color: #ffffff;")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(title)
@@ -56,7 +58,7 @@ class HomeWindow(QWidget):
         btn_layout.addWidget(self.btn_code)
         layout.addLayout(btn_layout)
 
-        subtitle = QLabel("Monitor hardware usage & model performance in real-time.")
+        subtitle = QLabel("Build, train, and monitor neural networks — no code required.")
         subtitle.setStyleSheet("color: #aaaaaa; font-style: italic;")
         subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(subtitle)

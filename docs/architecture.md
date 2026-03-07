@@ -31,6 +31,7 @@ neural-forge/
 │   ├── window_data.py         # Window 1: Data loading & preprocessing
 │   ├── window_model.py        # Window 2: Layer builder (sequential)
 │   ├── window_training.py     # Window 3: Training, monitoring, eval (Phase 4)
+│   ├── window_project_guide.py# Dev Mode: onboarding dialog
 │   ├── layer_row.py           # Custom widget: single layer row
 │   ├── data_table_view.py     # QTableView wrapper for CSV preview
 │   ├── plot_panel.py          # pyqtgraph loss-curve widget (Phase 5)
@@ -63,36 +64,41 @@ neural-forge/
 
 ---
 
-## 3-Window Pipeline
+## Dual-Path Pipeline
+
+The app offers two workflow paths from a **Home Screen**:
 
 ```mermaid
-flowchart LR
-    subgraph W1 ["Window 1 — Data"]
-        CSV["Load CSV"]
-        Preview["Table Preview"]
-        Target["Target Column Picker"]
-        Split["Split Config"]
-        ProbType["Problem Type"]
+flowchart TB
+    Home["Home Screen"]
+
+    subgraph P1 ["Path 1 — No-Code Pipeline"]
+        direction LR
+        W1["Window 1 — Data"]
+        W2["Window 2 — Model"]
     end
 
-    subgraph W2 ["Window 2 — Model"]
-        Builder["Layer Builder"]
-        SaveLoad["Save / Load JSON"]
-        Ghost["Ghost Run Validation"]
+    subgraph P2 ["Path 2 — Developer Mode"]
+        direction LR
+        Guide["Project Guide Dialog"]
+        Import["Folder Picker"]
     end
 
-    subgraph W3 ["Window 3 — Training"]
-        Hyper["Hyperparams"]
-        LossOpt["Loss & Optimizer"]
-        Device["Device Toggle"]
-        Plot["Loss Curve"]
-        Monitor["Resource Monitor"]
-        Export["ONNX Export"]
-    end
+    W3["Window 3 — Training (shared)"]
 
-    W1 -- "DataFrame + metadata" --> W2
-    W2 -- "nn.Sequential + blueprint" --> W3
+    Home -- "No-Code" --> W1
+    W1 --> W2
+    W2 --> W3
+    Home -- "Import Project" --> Guide
+    Guide --> Import
+    Import --> W3
 ```
+
+### Path 1 — No-Code Pipeline
+Load CSV → configure target/split → build model layer-by-layer → ghost run → train.
+
+### Path 2 — Developer Mode
+Import an existing PyTorch project folder. The user provides `model.py`, `dataset.py`, and an optional `config.yaml`. The shared training window handles execution, monitoring, and export.
 
 ### Window Transitions
 

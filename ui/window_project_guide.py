@@ -101,7 +101,7 @@ class ProjectGuideDialog(QDialog):
     @staticmethod
     def should_show() -> bool:
         """Return True unless the user has previously checked 'Don't show again'."""
-        settings = QSettings("VisionHub", "CVTrainer")
+        settings = QSettings("NeuralForge", "NeuralForge")
         return not settings.value(ProjectGuideDialog._SETTINGS_KEY, False, type=bool)
 
     # ------------------------------------------------------------------
@@ -346,7 +346,7 @@ class ProjectGuideDialog(QDialog):
     # ------------------------------------------------------------------
     def _accept(self):
         if self._dont_show_cb.isChecked():
-            settings = QSettings("VisionHub", "CVTrainer")
+            settings = QSettings("NeuralForge", "NeuralForge")
             settings.setValue(self._SETTINGS_KEY, True)
         self.accept()
 
