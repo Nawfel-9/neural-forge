@@ -95,19 +95,41 @@ SUCCESS       = "#3fb950"   # Green
 
 **Why it exists:** Each row in the scrolling list represents one neural network layer. The widget dynamically shows/hides controls based on the selected layer type.
 
+### Supported layer types (7 total)
+
+| Type | Controls shown | Blueprint output |
+|---|---|---|
+| **Linear** | Neurons, Activation | `{"type": "Linear", "neurons": 64, "activation": "ReLU"}` |
+| **Conv1d** | Channels, Kernel, Stride, Padding | `{"type": "Conv1d", "out_channels": 32, "kernel_size": 3, ...}` |
+| **MaxPool1d** | Kernel, Stride | `{"type": "MaxPool1d", "kernel_size": 2, "stride": 2}` |
+| **AvgPool1d** | Kernel, Stride | `{"type": "AvgPool1d", "kernel_size": 2, "stride": 2}` |
+| **Flatten** | *(none)* | `{"type": "Flatten"}` |
+| **BatchNorm1d** | *(none)* | `{"type": "BatchNorm1d"}` |
+| **Dropout** | Rate | `{"type": "Dropout", "rate": 0.3}` |
+
 ### Visual layout
 
 ```
+(Linear)
 ┌──────────────────────────────────────────────────────────────────────┐
 │  #1  │ Type: [Linear ▼] │ Neurons: [64] │ Activation: [None ▼] │ ✕ │
 └──────────────────────────────────────────────────────────────────────┘
 
+(Conv1d)
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  #2  │ Type: [Conv1d ▼] │ Channels: [32] │ Kernel: [3] │ Stride: [1] │ Padding: [0] │ ✕ │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+(MaxPool1d / AvgPool1d)
+┌──────────────────────────────────────────────────────────────┐
+│  #3  │ Type: [MaxPool1d ▼] │ Kernel: [2] │ Stride: [2] │ ✕ │
+└──────────────────────────────────────────────────────────────┘
+
+(Flatten / BatchNorm1d — only type + remove button visible)
 (Dropout)
 ┌───────────────────────────────────────────────┐
-│  #1  │ Type: [Dropout ▼] │ Rate: [0.30] │  ✕ │
+│  #5  │ Type: [Dropout ▼] │ Rate: [0.30] │  ✕ │
 └───────────────────────────────────────────────┘
-
-(BatchNorm1d — only type + remove button visible)
 ```
 
 ### Functions
@@ -117,9 +139,9 @@ SUCCESS       = "#3fb950"   # Green
 | `__init__(index)` | Creates widget, wires signals, sets initial visibility |
 | `_build_ui()` | Creates all child widgets in an `QHBoxLayout` |
 | `_connect_signals()` | Type → show/hide; all inputs → `config_changed`; remove → `remove_requested` |
-| `_on_type_changed()` | Shows neurons+activation for Linear, rate for Dropout, hides all for BatchNorm |
+| `_on_type_changed()` | Dynamic visibility per layer type |
 | `set_index(i)` | Updates the `#N` label after reordering |
-| `get_config() → dict` | Returns row state as a dict, e.g. `{"type": "Linear", "neurons": 128, "activation": "ReLU"}` |
+| `get_config() → dict` | Returns row state as a dict |
 | `set_config(dict)` | Populates widgets from a dict. Wrapped in try/except. |
 
 ### Signals
@@ -149,8 +171,8 @@ SUCCESS       = "#3fb950"   # Green
 │ │  └─────────────────────────────────────────┘    │  │
 │ └─────────────────────────────────────────────────┘  │
 │  Layers: 2                                           │
-│  [← Back] [＋ Add] [💾 Save] [📂 Load] [✅ Validate] │
-└─────────────────────────────────────────────────────┘
+│  [← Back] [＋ Add] [💾 Save] [📂 Load] [✅ Validate] [🔨 Build & Test] │
+└──────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Functions
@@ -167,7 +189,8 @@ SUCCESS       = "#3fb950"   # Green
 | **Save/Load** | `_save_blueprint()` | Validate → file dialog → JSON write |
 | | `_load_blueprint()` | File dialog → parse JSON → validate → rebuild rows |
 | **Validation** | `_validate_and_show()` | Shows ✅ or ⚠️ message |
-| | `sync_to_state() → bool` | Writes blueprint to `ProjectState` if valid |
+| **Build** | `_build_and_test()` | Builds nn.Sequential + ghost run, shows result |
+| | `sync_to_state() → bool` | Validates, builds model, ghost-runs, writes to `ProjectState` |
 
 ---
 
@@ -195,6 +218,9 @@ The `"version": 1` field future-proofs the format for adding metadata later.
 | 5 | Last layer must be `Linear` | Output layer must be Linear |
 | 6 | `Linear.neurons` must be a positive integer | Zero neurons make no sense |
 | 7 | `Linear.activation` must be a known value | Catch unsupported activations |
+| 8 | `Conv1d.out_channels` must be a positive integer | Invalid channel count |
+| 9 | `Conv1d` / pool `kernel_size` must be positive | Invalid kernel |
+| 10 | `Conv1d` / pool `stride` must be positive | Invalid stride |
 
 ---
 

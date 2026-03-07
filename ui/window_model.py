@@ -27,6 +27,7 @@ from PyQt6.QtWidgets import (
 )
 
 from ui.layer_row import LayerRow
+from backend.model_builder import build_and_validate
 from utils.blueprint_io import load_blueprint, save_blueprint
 from utils.project_state import ProjectState
 from utils.validators import validate_blueprint
@@ -157,6 +158,12 @@ class ModelBuilderWindow(QMainWindow):
         self.btn_validate.setMinimumHeight(36)
         self.btn_validate.clicked.connect(self._validate_and_show)
         btn_bar.addWidget(self.btn_validate)
+
+        self.btn_build = QPushButton("🔨  Build & Test")
+        self.btn_build.setProperty("class", "primary")
+        self.btn_build.setMinimumHeight(36)
+        self.btn_build.clicked.connect(self._build_and_test)
+        btn_bar.addWidget(self.btn_build)
 
         root.addLayout(btn_bar)
 
@@ -315,17 +322,77 @@ class ModelBuilderWindow(QMainWindow):
                 f"An unexpected error occurred during validation.\n\n{exc}",
             )
 
+    # ── Build & Ghost Run ───────────────────────────────────────────────────
+    def _build_and_test(self) -> None:
+        """Build nn.Sequential from blueprint + run ghost forward pass."""
+        try:
+            blueprint = self.get_architecture()
+            valid, msg = validate_blueprint(blueprint)
+            if not valid:
+                QMessageBox.warning(self, "Invalid Blueprint", msg)
+                return
+
+            # Determine input features
+            n_features = self.state.input_features()
+            if n_features == 0:
+                QMessageBox.warning(
+                    self,
+                    "No Data Loaded",
+                    "Load a dataset in Window 1 first so the ghost run \n"
+                    "can determine the correct input dimensions."
+                )
+                return
+
+            model, dummy, success, msg = build_and_validate(
+                blueprint, n_features,
+            )
+            if success:
+                self.state.model = model
+                self.state.blueprint = blueprint
+                self.state.dummy_tensor = dummy
+                QMessageBox.information(
+                    self,
+                    "Build Successful ✅",
+                    f"{msg}\n\nModel summary:\n{model}",
+                )
+            else:
+                QMessageBox.warning(self, "Build Failed", msg)
+
+        except Exception as exc:
+            QMessageBox.critical(
+                self,
+                "Build Error",
+                f"An unexpected error occurred.\n\n{type(exc).__name__}: {exc}",
+            )
+
     # ── Sync with ProjectState ──────────────────────────────────────────────
     def sync_to_state(self) -> bool:
         """
-        Write the current blueprint into ``self.state`` if it's valid.
+        Validate, build the model, ghost-run, and write to state.
 
-        Returns True on success, False on validation failure (shows dialog).
+        Returns True on success, False on failure (shows dialog).
         """
         blueprint = self.get_architecture()
         valid, msg = validate_blueprint(blueprint)
         if not valid:
             QMessageBox.warning(self, "Cannot Proceed", msg)
             return False
+
+        n_features = self.state.input_features()
+        if n_features == 0:
+            QMessageBox.warning(
+                self,
+                "No Data Loaded",
+                "Load a dataset in Window 1 first.",
+            )
+            return False
+
+        model, dummy, success, msg = build_and_validate(blueprint, n_features)
+        if not success:
+            QMessageBox.warning(self, "Build Failed", msg)
+            return False
+
         self.state.blueprint = blueprint
+        self.state.model = model
+        self.state.dummy_tensor = dummy
         return True

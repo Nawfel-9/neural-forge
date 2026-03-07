@@ -16,12 +16,12 @@ Built with **PyQt6** (dark-themed UI) and **PyTorch** (ML backend), following a 
 | Target column picker (defaults to last column) | ✅ |
 | Classification / Regression toggle | ✅ |
 | Train/Validation split (percentage or K-Fold CV) | ✅ |
-| Sequential layer builder (Linear, Dropout, BatchNorm1d) | ✅ |
+| Sequential layer builder (Linear, Conv1d, MaxPool1d, AvgPool1d, Flatten, BatchNorm1d, Dropout) | ✅ |
 | Dynamic add/remove layer rows | ✅ |
 | Blueprint save/load as JSON | ✅ |
-| Blueprint validation (7 rules) | ✅ |
-| Blueprint → `nn.Sequential` model builder | 🔜 Phase 3 |
-| Ghost Run (dummy tensor validation) | 🔜 Phase 3 |
+| Blueprint validation (10 rules) | ✅ |
+| Blueprint → `nn.Sequential` with LazyLinear auto-inference | ✅ |
+| Ghost Run (dummy tensor validation) | ✅ |
 | Multithreaded training with `QThread` | 🔜 Phase 4 |
 | GPU/CPU/MPS hardware toggle | 🔜 Phase 4 |
 | Real-time loss curve (pyqtgraph) | 🔜 Phase 5 |
@@ -96,12 +96,14 @@ python -m pytest tests/ -v
 │
 ├── tests/                     # Automated tests
 │   ├── test_phase1.py         # 28 tests
-│   └── test_phase2.py         # 24 tests
+│   ├── test_phase2.py         # 24 tests
+│   └── test_phase3.py         # 28 tests
 │
 └── docs/                      # Documentation
     ├── architecture.md
     ├── walkthrough_phase1.md
-    └── walkthrough_phase2.md
+    ├── walkthrough_phase2.md
+    └── walkthrough_phase3.md
 ```
 
 ---
@@ -113,6 +115,7 @@ python -m pytest tests/ -v
 | [Architecture](docs/architecture.md) | System design, directory layout, pipeline diagram, blueprint format, dependencies |
 | [Phase 1 Walkthrough](docs/walkthrough_phase1.md) | Layer builder UI, blueprint save/load, validation — every function explained |
 | [Phase 2 Walkthrough](docs/walkthrough_phase2.md) | Data loading, cleaning, splitting, table preview — every function explained |
+| [Phase 3 Walkthrough](docs/walkthrough_phase3.md) | Blueprint → nn.Sequential, LazyLinear, ghost run — every function explained |
 
 ---
 
@@ -127,10 +130,11 @@ Built Window 2 (Model Builder) with a scrollable layer list, dynamic add/remove,
 ### Phase 2: Data Pipeline & Validation ✅
 Built Window 1 (Data Loading) with CSV file loading, 5-row table preview, target column picker, classification/regression toggle, percentage/K-Fold split config, NaN cleaning (fill mean or drop rows), and a 5-step validation chain before proceeding. Wired up the 2-window pipeline with forward/backward navigation.
 
-### Phase 3: PyTorch Translation Engine 🔜
-*Next up:* Blueprint → `nn.Sequential`, `nn.LazyLinear`, ghost run validation.
+### Phase 3: PyTorch Translation Engine ✅
+Built the translation engine (`model_builder.py`) that converts blueprints into `nn.Sequential` models using `LazyLinear`/`LazyConv1d`/`LazyBatchNorm1d` for auto-inferred dimensions. Ghost run validates architectures with a dummy forward pass. Added "Build & Test" button to Window 2.
 
 ### Phase 4: Multithreading & Hardware Selection 🔜
+*Next up:* `TrainingWorker(QThread)`, GPU/CPU/MPS toggle, training loop.
 
 ### Phase 5: Visualization, Monitoring & Export 🔜
 
@@ -142,6 +146,6 @@ Built Window 1 (Data Loading) with CSV file loading, 5-row table preview, target
 - **Foolproof fallbacks** — Every user interaction wrapped in `try/except` with friendly `QMessageBox` dialogs.
 - **Thread-safe** — Training runs on `QThread` with `pyqtSignal` (Phase 4), never on the main GUI thread.
 - **Dark theme** — Comprehensive QSS + QPalette styling defined once in `styles.py`.
-- **Tested** — 52 automated tests across 2 phases, covering logic, I/O, validation, and UI widgets.
+- **Tested** — 80 automated tests across 3 phases, covering logic, I/O, validation, model building, and UI widgets.
 
 ---

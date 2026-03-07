@@ -49,7 +49,6 @@ from backend.data_handler import (
 from ui.data_table_view import DataPreviewTable
 from utils.project_state import ProjectState
 
-
 class DataWindow(QMainWindow):
     """
     Window 1 of the pipeline — data loading and preprocessing.

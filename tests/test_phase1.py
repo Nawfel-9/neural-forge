@@ -215,8 +215,12 @@ class TestLayerRowWidget:
 
 @pytest.mark.skipif(not _HAS_QT, reason="PyQt6 not installed")
 class TestModelBuilderWindow:
-    def _make_window(self) -> ModelBuilderWindow:
+    def _make_window(self, with_data=False) -> ModelBuilderWindow:
+        import pandas as pd
         state = ProjectState()
+        if with_data:
+            state.dataframe = pd.DataFrame({"a": [1, 2], "b": [3, 4], "target": [0, 1]})
+            state.target_column = "target"
         return ModelBuilderWindow(project_state=state)
 
     def test_starts_with_one_layer(self):
@@ -244,9 +248,10 @@ class TestModelBuilderWindow:
         assert arch[1]["neurons"] == 32
 
     def test_sync_valid(self):
-        w = self._make_window()
+        w = self._make_window(with_data=True)
         assert w.sync_to_state() is True
         assert len(w.state.blueprint) == 1
+        assert w.state.model is not None
 
     def test_clear_and_rebuild(self):
         w = self._make_window()

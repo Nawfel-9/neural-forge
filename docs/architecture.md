@@ -12,7 +12,7 @@
 | 2 | Train/Val split | K-fold cross-validation support + percentage split |
 | 3 | Loss & Optimizer | Smart selection based on problem type (classification / regression) |
 | 4 | Batch size | User-configurable, default `32` |
-| 5 | Layer types | Linear, Dropout **now**; BatchNorm1d, Conv1d/Conv2d **planned** |
+| 5 | Layer types | Linear, Conv1d, MaxPool1d, AvgPool1d, Flatten, BatchNorm1d, Dropout |
 | 6 | Problem type | UI toggle: classification vs. regression |
 | 7 | UI layout | **3-window pipeline** (Data → Model → Training) |
 | 8 | Theme | Dark theme |
@@ -51,12 +51,14 @@ neural-forge/
 │
 ├── tests/
 │   ├── test_phase1.py
-│   └── test_phase2.py
+│   ├── test_phase2.py
+│   └── test_phase3.py
 │
 └── docs/
     ├── architecture.md        # This file
     ├── walkthrough_phase1.md  # Phase 1 code walkthrough
-    └── walkthrough_phase2.md  # Phase 2 code walkthrough
+    ├── walkthrough_phase2.md  # Phase 2 code walkthrough
+    └── walkthrough_phase3.md  # Phase 3 code walkthrough
 ```
 
 ---
@@ -125,17 +127,29 @@ When the user picks **Classification** or **Regression** in Window 1, the dropdo
 
 ## Blueprint Format
 
+Each layer type has its own schema:
+
 ```json
 [
+  {"type": "Conv1d", "out_channels": 32, "kernel_size": 3, "stride": 1, "padding": 1},
+  {"type": "MaxPool1d", "kernel_size": 2, "stride": 2},
+  {"type": "Flatten"},
   {"type": "Linear", "neurons": 128, "activation": "ReLU"},
   {"type": "BatchNorm1d"},
   {"type": "Dropout", "rate": 0.3},
-  {"type": "Linear", "neurons": 64, "activation": "Sigmoid"},
   {"type": "Linear", "neurons": 10, "activation": "None"}
 ]
 ```
 
-> **Note:** Conv layers (future) will add `kernel_size`, `stride`, `padding` fields. The builder handles this gracefully since each layer type defines its own schema.
+| Layer Type | Fields |
+|---|---|
+| `Linear` | `neurons`, `activation` |
+| `Conv1d` | `out_channels`, `kernel_size`, `stride`, `padding` |
+| `MaxPool1d` | `kernel_size`, `stride` |
+| `AvgPool1d` | `kernel_size`, `stride` |
+| `Flatten` | *(none)* |
+| `BatchNorm1d` | *(none)* |
+| `Dropout` | `rate` |
 
 ---
 
