@@ -49,11 +49,13 @@ class ModelBuilderWindow(QMainWindow):
         self,
         project_state: ProjectState,
         on_back=None,
+        on_next=None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self.state = project_state
         self._on_back_callback = on_back
+        self._on_next_callback = on_next
         self._layer_rows: list[LayerRow] = []
         self._init_window()
         self._build_ui()
@@ -89,18 +91,14 @@ class ModelBuilderWindow(QMainWindow):
         root.addWidget(subtitle)
 
         # ── Data info (shows loaded dataset context) ────────────────────────
-        if self.state.dataframe is not None:
-            n_feat = self.state.input_features()
-            prob = self.state.problem_type.capitalize()
-            self.lbl_data_info = QLabel(
-                f"📋  Dataset: {n_feat} input features  •  "
-                f"Target: {self.state.target_column}  •  "
-                f"Problem: {prob}"
-            )
-            self.lbl_data_info.setStyleSheet(
-                "color: #58a6ff; font-size: 12px; padding: 4px 0;"
-            )
-            root.addWidget(self.lbl_data_info)
+        self.lbl_data_info = QLabel("")
+        self.lbl_data_info.setStyleSheet(
+            "color: #58a6ff; font-size: 12px; padding: 4px 0;"
+        )
+        self.lbl_data_info.setVisible(False)
+        root.addWidget(self.lbl_data_info)
+        
+        self.refresh_data_info()
 
         # ── Scrollable layer list ───────────────────────────────────────────
         self.scroll_area = QScrollArea()
@@ -165,7 +163,29 @@ class ModelBuilderWindow(QMainWindow):
         self.btn_build.clicked.connect(self._build_and_test)
         btn_bar.addWidget(self.btn_build)
 
+        self.btn_next = QPushButton("Next  →  Training")
+        self.btn_next.setProperty("class", "primary")
+        self.btn_next.setMinimumHeight(36)
+        self.btn_next.setEnabled(False) # Enabled after successful build
+        self.btn_next.clicked.connect(self._on_next)
+        
+        btn_bar.addWidget(self.btn_next)
+
         root.addLayout(btn_bar)
+
+    def refresh_data_info(self) -> None:
+        """Update the data info label from the current ProjectState."""
+        if self.state.dataframe is not None:
+            n_feat = self.state.input_features()
+            prob = self.state.problem_type.capitalize()
+            self.lbl_data_info.setText(
+                f"📋  Dataset: {n_feat} input features  •  "
+                f"Target: {self.state.target_column}  •  "
+                f"Problem: {prob}"
+            )
+            self.lbl_data_info.setVisible(True)
+        else:
+            self.lbl_data_info.setVisible(False)
 
     # ── Layer management ────────────────────────────────────────────────────
     def _add_layer_row(self, config: dict | None = None) -> None:
@@ -343,13 +363,14 @@ class ModelBuilderWindow(QMainWindow):
                 )
                 return
 
-            model, dummy, success, msg = build_and_validate(
+            model, dummy_input, success, msg = build_and_validate(
                 blueprint, n_features,
             )
             if success:
                 self.state.model = model
                 self.state.blueprint = blueprint
-                self.state.dummy_tensor = dummy
+                self.state.dummy_tensor = dummy_input
+                self.btn_next.setEnabled(True)
                 QMessageBox.information(
                     self,
                     "Build Successful ✅",
@@ -387,12 +408,20 @@ class ModelBuilderWindow(QMainWindow):
             )
             return False
 
-        model, dummy, success, msg = build_and_validate(blueprint, n_features)
+        model, dummy_input, success, msg = build_and_validate(blueprint, n_features)
         if not success:
             QMessageBox.warning(self, "Build Failed", msg)
             return False
 
         self.state.blueprint = blueprint
         self.state.model = model
-        self.state.dummy_tensor = dummy
+        self.state.dummy_tensor = dummy_input
+        self.btn_next.setEnabled(True)
         return True
+
+    def _on_next(self) -> None:
+        """Validate, sync to state, and open Window 3."""
+        if not self.sync_to_state():
+            return
+        if self._on_next_callback:
+            self._on_next_callback()

@@ -11,7 +11,7 @@
 | [`utils/project_state.py`](../utils/project_state.py) | Shared data container for all 3 windows |
 | [`ui/styles.py`](../ui/styles.py) | Dark theme colours + QSS stylesheet |
 | [`ui/layer_row.py`](../ui/layer_row.py) | Custom widget: one row = one layer |
-| [`ui/window_model.py`](../ui/window_model.py) | Window 2: the Model Builder |
+| [`ui/window_model.py`](../ui/window_model.py) | View 2: the Model Builder |
 | [`utils/blueprint_io.py`](../utils/blueprint_io.py) | JSON save/load for blueprints |
 | [`utils/validators.py`](../utils/validators.py) | Blueprint validation rules |
 | [`main.py`](../main.py) | Application entry point |
@@ -21,7 +21,7 @@
 
 ## 1. `utils/project_state.py` — The Shared Data Container
 
-**Why it exists:** The app has 3 windows (Data → Model → Training). They all need to share data — the loaded CSV, the layer blueprint, hyperparameters, etc. Instead of passing dozens of variables around, they all read/write to **one `ProjectState`** object.
+**Why it exists:** The app has several views (Home → Data → Model → Training). They all need to share data — the loaded CSV, the layer blueprint, hyperparameters, etc. Instead of passing dozens of variables around, they all read/write to **one `ProjectState`** object.
 
 ```python
 @dataclass
@@ -153,7 +153,7 @@ SUCCESS       = "#3fb950"   # Green
 
 ---
 
-## 4. `ui/window_model.py` — The Model Builder Window
+## 4. `ui/window_model.py` — The Model Builder View
 
 **Why it exists:** Manages a vertical list of `LayerRow` widgets with save/load/validate controls and navigation.
 
@@ -228,9 +228,10 @@ The `"version": 1` field future-proofs the format for adding metadata later.
 
 ```python
 class PipelineController:
-    def start(self):            # Show Window 1 (Data)
-    def _open_model_window(self):  # Hide W1, show Window 2
-    def _back_to_data(self):       # Close W2, re-show W1
+    def start(self):            # Show Home View
+    def _open_data_window(self):   # Switch to Data View
+    def _open_model_window(self):  # Switch to Model View
+    def _back_to_data(self):       # Switch back to Data
 ```
 
 ```python

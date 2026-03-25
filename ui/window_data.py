@@ -39,13 +39,8 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from backend.data_handler import (
-    NaNStrategy,
-    clean_dataframe,
-    count_input_features,
-    detect_columns,
-    load_csv,
-)
+from PyQt6.QtCore import Qt, QThread
+from workers.data_loader_worker import DataLoaderWorker
 from ui.data_table_view import DataPreviewTable
 from utils.project_state import ProjectState
 
@@ -72,6 +67,8 @@ class DataWindow(QMainWindow):
         self._on_next_callback = on_next
         self._raw_df = None  # keeps original before cleaning
         self._cleaned_df = None
+        self._worker_thread = None
+        self._worker = None
 
         self._init_window()
         self._build_ui()
@@ -143,6 +140,9 @@ class DataWindow(QMainWindow):
         btn_bar.addWidget(self.btn_next)
 
         root.addLayout(btn_bar)
+
+        # ── Status bar ──────────────────────────────────────────────────────
+        self.statusBar().showMessage("Ready")
 
     # ── Target + problem type panel ─────────────────────────────────────────
     def _build_target_panel(self) -> QGroupBox:
@@ -253,55 +253,46 @@ class DataWindow(QMainWindow):
 
     # ── CSV loading ─────────────────────────────────────────────────────────
     def _load_csv(self) -> None:
-        try:
-            path, _ = QFileDialog.getOpenFileName(
-                self,
-                "Select CSV File",
-                "",
-                "CSV Files (*.csv);;TSV Files (*.tsv);;All Files (*)",
-            )
-            if not path:
-                return
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Select CSV File",
+            "",
+            "CSV Files (*.csv);;TSV Files (*.tsv);;All Files (*)",
+        )
+        if not path:
+            return
 
-            df = load_csv(path)
-            self._raw_df = df
-            self._cleaned_df = None
+        self._start_worker("load", filepath=path)
 
-            # Update file label
-            fname = os.path.basename(path)
-            self.lbl_file.setText(f"✅  {fname}")
-            self.lbl_file.setStyleSheet("color: #3fb950;")
+    def _on_load_finished(self, df: pd.DataFrame, _) -> None:
+        self._raw_df = df
+        self._cleaned_df = None
 
-            # Show info
-            self.lbl_info.setText(
-                f"{df.shape[0]} rows × {df.shape[1]} columns  •  "
-                f"NaN cells: {int(df.isna().sum().sum())}"
-            )
+        # Update file label
+        fname = "Loaded Data" # placeholder if path not stored, let's refine
+        self.lbl_file.setText(f"✅  Data Loaded")
+        self.lbl_file.setStyleSheet("color: #3fb950;")
 
-            # Populate preview
-            self.preview.set_dataframe(df)
+        # Show info
+        self.lbl_info.setText(
+            f"{df.shape[0]} rows × {df.shape[1]} columns  •  "
+            f"NaN cells: {int(df.isna().sum().sum())}"
+        )
 
-            # Populate target column dropdown (default to last column)
-            columns = detect_columns(df)
-            self.combo_target.clear()
-            self.combo_target.addItems(columns)
-            self.combo_target.setCurrentIndex(len(columns) - 1)  # default last
-            self.combo_target.setEnabled(True)
+        # Populate preview
+        self.preview.set_dataframe(df)
 
-            # Enable controls
-            self.btn_clean.setEnabled(True)
-            self.btn_next.setEnabled(True)
+        # Populate target column dropdown
+        from backend.data_handler import detect_columns
+        columns = detect_columns(df)
+        self.combo_target.clear()
+        self.combo_target.addItems(columns)
+        self.combo_target.setCurrentIndex(len(columns) - 1)
+        self.combo_target.setEnabled(True)
 
-        except FileNotFoundError:
-            QMessageBox.critical(
-                self, "File Not Found", "The selected file could not be found."
-            )
-        except Exception as exc:
-            QMessageBox.critical(
-                self,
-                "Load Error",
-                f"Failed to load the CSV file.\n\n{type(exc).__name__}: {exc}",
-            )
+        self.btn_clean.setEnabled(True)
+        self.btn_next.setEnabled(True)
+        self.statusBar().showMessage("Data loaded successfully.", 3000)
 
     # ── Data cleaning ───────────────────────────────────────────────────────
     def _clean_data(self) -> None:
@@ -309,38 +300,75 @@ class DataWindow(QMainWindow):
             QMessageBox.warning(self, "No Data", "Load a CSV file first.")
             return
 
-        try:
-            strategy = (
-                NaNStrategy.FILL_MEAN
-                if self.combo_nan.currentIndex() == 0
-                else NaNStrategy.DROP_ROWS
-            )
-            cleaned, report = clean_dataframe(self._raw_df, nan_strategy=strategy)
-            self._cleaned_df = cleaned
+        from backend.data_handler import NaNStrategy
+        strategy = (
+            NaNStrategy.FILL_MEAN
+            if self.combo_nan.currentIndex() == 0
+            else NaNStrategy.DROP_ROWS
+        )
+        self._start_worker("clean", df=self._raw_df, strategy=strategy)
 
-            # Refresh preview & info
-            self.preview.set_dataframe(cleaned)
-            self.lbl_info.setText(
-                f"{cleaned.shape[0]} rows × {cleaned.shape[1]} columns  •  "
-                f"NaN cells: {report['nan_count_after']}  •  "
-                f"Strategy: {report['strategy_used']}  •  "
-                f"Rows removed: {report['rows_before'] - report['rows_after']}"
-            )
+    def _on_clean_finished(self, cleaned: pd.DataFrame, report: dict) -> None:
+        self._cleaned_df = cleaned
 
-            QMessageBox.information(
-                self,
-                "Data Cleaned ✅",
-                f"NaN before: {report['nan_count_before']}\n"
-                f"NaN after:  {report['nan_count_after']}\n"
-                f"Rows: {report['rows_before']} → {report['rows_after']}\n"
-                f"Strategy: {report['strategy_used']}",
-            )
-        except Exception as exc:
-            QMessageBox.critical(
-                self,
-                "Cleaning Error",
-                f"Failed to clean the data.\n\n{type(exc).__name__}: {exc}",
-            )
+        # Refresh preview & info
+        self.preview.set_dataframe(cleaned)
+        self.lbl_info.setText(
+            f"{cleaned.shape[0]} rows × {cleaned.shape[1]} columns  •  "
+            f"NaN cells: {report['nan_count_after']}  •  "
+            f"Strategy: {report['strategy_used']}  •  "
+            f"Rows removed: {report['rows_before'] - report['rows_after']}"
+        )
+
+        QMessageBox.information(
+            self,
+            "Data Cleaned ✅",
+            f"NaN before: {report['nan_count_before']}\n"
+            f"NaN after:  {report['nan_count_after']}\n"
+            f"Rows: {report['rows_before']} → {report['rows_after']}\n"
+            f"Strategy: {report['strategy_used']}",
+        )
+        self.statusBar().showMessage("Data cleaned.", 3000)
+
+    # ── Worker Management ───────────────────────────────────────────────────
+    def _start_worker(self, task: str, **kwargs):
+        self.setCursor(Qt.CursorShape.WaitCursor)
+        self.btn_load.setEnabled(False)
+        self.btn_clean.setEnabled(False)
+        self.btn_next.setEnabled(False)
+
+        self._worker_thread = QThread()
+        self._worker = DataLoaderWorker(task, **kwargs)
+        self._worker.moveToThread(self._worker_thread)
+
+        self._worker_thread.started.connect(self._worker.run)
+        self._worker.progress.connect(lambda msg: self.statusBar().showMessage(msg))
+        self._worker.error.connect(self._on_worker_error)
+
+        if task == "load":
+            self._worker.finished.connect(self._on_load_finished)
+        else:
+            self._worker.finished.connect(self._on_clean_finished)
+
+        self._worker.finished.connect(self._cleanup_worker)
+        self._worker.error.connect(self._cleanup_worker)
+
+        self._worker_thread.start()
+
+    def _on_worker_error(self, msg: str):
+        QMessageBox.critical(self, "Error", f"Operation failed:\n{msg}")
+        self.statusBar().showMessage("Error occurred.")
+
+    def _cleanup_worker(self):
+        self.setCursor(Qt.CursorShape.ArrowCursor)
+        self.btn_load.setEnabled(True)
+        if self._raw_df is not None:
+            self.btn_clean.setEnabled(True)
+            self.btn_next.setEnabled(True)
+        
+        if self._worker_thread:
+            self._worker_thread.quit()
+            self._worker_thread.wait()
 
     # ── Next → ──────────────────────────────────────────────────────────────
     def _on_next(self) -> None:
@@ -364,6 +392,7 @@ class DataWindow(QMainWindow):
                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 )
                 if reply == QMessageBox.StandardButton.Yes:
+                    from backend.data_handler import NaNStrategy, clean_dataframe
                     df, _ = clean_dataframe(df, NaNStrategy.FILL_MEAN)
                     self._cleaned_df = df
                     self.preview.set_dataframe(df)
@@ -381,6 +410,7 @@ class DataWindow(QMainWindow):
                 return
 
             # Feature count check
+            from backend.data_handler import count_input_features
             n_features = count_input_features(df, target)
             if n_features == 0:
                 QMessageBox.warning(

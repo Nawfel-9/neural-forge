@@ -10,7 +10,7 @@
 |---|---|---|
 | **NEW** | [`backend/data_handler.py`](../backend/data_handler.py) | CSV load, NaN clean, split (no Qt) |
 | **NEW** | [`ui/data_table_view.py`](../ui/data_table_view.py) | QTableView wrapper for DataFrame |
-| **NEW** | [`ui/window_data.py`](../ui/window_data.py) | Window 1: data loading UI |
+| **NEW** | [`ui/window_data.py`](../ui/window_data.py) | Data View: data loading UI |
 | **NEW** | [`tests/test_phase2.py`](../tests/test_phase2.py) | 24 automated tests |
 | Modified | [`main.py`](../main.py) | PipelineController (Window 1 ↔ 2) |
 | Modified | [`ui/window_model.py`](../ui/window_model.py) | Added ← Back button + data info |
@@ -102,7 +102,7 @@ Convenience wrapper:
 
 ---
 
-## 3. `ui/window_data.py` — Window 1 (Data Loading)
+## 3. `ui/window_data.py` — Data View (Loading & Preprocessing)
 
 **Why it exists:** The first window the user sees. Handles everything from file selection to data validation before passing clean data to Window 2.
 
@@ -164,16 +164,17 @@ self.state.split_config  = {"method": "percentage", "ratio": 0.8}
 
 ## 4. `main.py` — PipelineController (Updated)
 
-Replaced the old direct-Window-2-launch with a controller managing transitions:
+Replaced the old method with a unified `PipelineController` using `QStackedWidget`:
 
 ```python
 class PipelineController:
-    def start(self):               # Show Window 1 (Data)
-    def _open_model_window(self):  # Hide W1, show Window 2
-    def _back_to_data(self):       # Close W2, re-show W1
+    def start(self):               # Show Home View
+    def _open_data_window(self):   # Switch to Data View
+    def _open_model_window(self):  # Switch to Model View
+    def _back_to_data(self):       # Return to Data View
 ```
 
-**Flow:** `start()` → Window 1 → "Next →" → `_open_model_window()` → Window 2 → "← Back" → `_back_to_data()` → Window 1
+**Flow:** Home → Data View → "Next →" → Model View → "← Back" → Data View
 
 ---
 

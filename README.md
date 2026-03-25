@@ -23,11 +23,11 @@ Built with **PyQt6** (dark-themed UI) and **PyTorch** (ML backend), following a 
 | Blueprint validation (10 rules) | ✅ |
 | Blueprint → `nn.Sequential` with LazyLinear auto-inference | ✅ |
 | Ghost Run (dummy tensor validation) | ✅ |
-| Multithreaded training with `QThread` | 🔜 Phase 4 |
-| GPU/CPU/MPS hardware toggle | 🔜 Phase 4 |
-| Real-time loss curve (pyqtgraph) | 🔜 Phase 5 |
-| CPU/RAM/VRAM resource monitor | 🔜 Phase 5 |
-| ONNX model export | 🔜 Phase 5 |
+| Multithreaded training with `QThread` | ✅ |
+| GPU/CPU/MPS hardware toggle | ✅ |
+| Real-time loss curve (pyqtgraph) | ✅ |
+| CPU/RAM/VRAM resource monitor | ✅ |
+| ONNX model export | ✅ |
 | **Developer Mode** | |
 | Project import with folder picker | ✅ |
 | Project structure guide dialog (Don't show again) | ✅ |
@@ -142,10 +142,11 @@ Built Window 1 (Data Loading) with CSV file loading, 5-row table preview, target
 ### Phase 3: PyTorch Translation Engine ✅
 Built the translation engine (`model_builder.py`) that converts blueprints into `nn.Sequential` models using `LazyLinear`/`LazyConv1d`/`LazyBatchNorm1d` for auto-inferred dimensions. Ghost run validates architectures with a dummy forward pass. Added "Build & Test" button to Window 2.
 
-### Phase 4: Multithreading & Hardware Selection 🔜
-*Next up:* `TrainingWorker(QThread)`, GPU/CPU/MPS toggle, training loop.
+### Phase 4: Multithreading & Hardware Selection ✅
+Built `TrainingWorker(QThread)` for multithreaded non-blocking PyTorch training loops, a CPU/CUDA/MPS automatic detection interface, and UI elements integrated into a third window (`window_training.py`).
 
-### Phase 5: Visualization, Monitoring & Export 🔜
+### Phase 5: Visualization, Monitoring & Export ✅
+Integrated `pyqtgraph` for real-time live loss curves, a `QTimer`-driven `psutil` integration for subsystem resource monitoring, and a fully functional ONNX export bridge in `backend/exporter.py`.
 
 ---
 

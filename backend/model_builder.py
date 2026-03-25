@@ -220,6 +220,26 @@ def ghost_run(
             f"Ghost run failed: {type(exc).__name__}: {exc}"
         )
 
+def ghost_run_with_input(
+    model: nn.Sequential,
+    input_features: int,
+    batch_size: int = 2,
+) -> tuple[bool, torch.Tensor | None, str]:
+    """
+    Perform a forward pass and return the INPUT tensor if successful.
+    """
+    try:
+        model.eval()
+        dummy_input = torch.randn(batch_size, input_features)
+        with torch.no_grad():
+            output = model(dummy_input)
+        
+        return True, dummy_input, (
+            f"Ghost run passed! Input shape: {tuple(dummy_input.shape)} -> Output shape: {tuple(output.shape)}"
+        )
+    except Exception as exc:
+        return False, None, f"Ghost run failed: {exc}"
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Convenience: build + ghost run in one step
@@ -251,8 +271,8 @@ def build_and_validate(
     except Exception as exc:
         return None, None, False, f"Build failed: {type(exc).__name__}: {exc}"
 
-    success, dummy_output, msg = ghost_run(model, input_features, batch_size)
+    success, dummy_input, msg = ghost_run_with_input(model, input_features, batch_size)
     if not success:
         return None, None, False, msg
 
-    return model, dummy_output, True, msg
+    return model, dummy_input, True, msg
