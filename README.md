@@ -124,6 +124,8 @@ python -m pytest tests/ -v
 | [Phase 1 Walkthrough](docs/walkthrough_phase1.md) | Layer builder UI, blueprint save/load, validation — every function explained |
 | [Phase 2 Walkthrough](docs/walkthrough_phase2.md) | Data loading, cleaning, splitting, table preview — every function explained |
 | [Phase 3 Walkthrough](docs/walkthrough_phase3.md) | Blueprint → nn.Sequential, LazyLinear, ghost run — every function explained |
+| [Phase 4 Walkthrough](docs/walkthrough_phase4.md) | Training worker, threading, hardware selection — every function explained |
+| [Phase 5 Walkthrough](docs/walkthrough_phase5.md) | ONNX export, visualization, monitoring — every function explained |
 | [Dev Mode Walkthrough](docs/walkthrough_dev_mode.md) | HomeWindow, ProjectGuideDialog, config.yaml bridge, dual-path architecture |
 
 ---
