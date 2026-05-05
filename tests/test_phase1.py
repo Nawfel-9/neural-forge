@@ -242,10 +242,35 @@ class TestModelBuilderWindow:
 
     def test_get_architecture(self):
         w = self._make_window()
-        w._add_layer_row({"type": "Linear", "neurons": 32, "activation": "ReLU"})
+        # By default, window has 1 output layer forced to 1 neuron (no data loaded).
+        # We simulate loading a blueprint to bypass automatic enforcement during addition
+        w._is_loading_blueprint = True
+        try:
+            w._add_layer_row({"type": "Linear", "neurons": 32, "activation": "ReLU"})
+        finally:
+            w._is_loading_blueprint = False
+        w._update_output_layer() # manual update
+        
         arch = w.get_architecture()
         assert len(arch) == 2
-        assert arch[1]["neurons"] == 32
+        # First layer was the original output layer (forced to 1 initially, now unlocked and stays 1)
+        assert arch[0]["neurons"] == 1
+        # Second layer is now the output layer and forced to 1
+        assert arch[1]["neurons"] == 1
+        
+        # Test loading a blueprint with a hidden layer correctly retains properties
+        w._clear_all_rows()
+        w._is_loading_blueprint = True
+        try:
+            w._add_layer_row({"type": "Linear", "neurons": 128, "activation": "ReLU"})
+            w._add_layer_row({"type": "Linear", "neurons": 10, "activation": "None"})
+        finally:
+            w._is_loading_blueprint = False
+        w._update_output_layer()
+        
+        arch2 = w.get_architecture()
+        assert arch2[0]["neurons"] == 128
+        assert arch2[1]["neurons"] == 1 # forced
 
     def test_sync_valid(self):
         w = self._make_window(with_data=True)

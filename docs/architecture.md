@@ -40,6 +40,7 @@ neural-forge/
 ├── backend/
 │   ├── model_builder.py       # Blueprint → nn.Sequential + ghost run
 │   ├── data_handler.py        # Pandas load/clean/split → tensors
+│   ├── training_config.py     # Loss & optimizer registry
 │   └── exporter.py            # ONNX export
 │
 ├── workers/
@@ -122,12 +123,15 @@ class ProjectState:
 
 ## Smart Loss & Optimizer Selection
 
-When the user picks **Classification** or **Regression** in Window 1, the dropdowns in Window 3 auto-filter:
+When the user picks **Classification** or **Regression** in Window 1, the
+"Training Configuration" panel in Window 3 auto-filters the loss dropdown.
+The registry lives in `backend/training_config.py` — a single source of truth
+consumed by both the UI and `TrainingWorker`.
 
 | Problem Type | Available Losses | Available Optimizers |
 |---|---|---|
-| Classification | `CrossEntropyLoss`, `BCEWithLogitsLoss`, `NLLLoss` | `Adam`, `AdamW`, `SGD` |
-| Regression | `MSELoss`, `L1Loss`, `SmoothL1Loss` | `Adam`, `AdamW`, `SGD` |
+| Classification | `CrossEntropyLoss`, `BCEWithLogitsLoss`, `NLLLoss` | `Adam`, `AdamW`, `SGD`, `RMSprop` |
+| Regression | `MSELoss`, `L1Loss`, `SmoothL1Loss` | `Adam`, `AdamW`, `SGD`, `RMSprop` |
 
 ---
 

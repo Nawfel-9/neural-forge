@@ -29,11 +29,16 @@ from PyQt6.QtWidgets import (
     QTextEdit,
     QVBoxLayout,
     QWidget,
+    QTabWidget,
+    QSplitter,
 )
 
 from utils.project_state import ProjectState
 from workers.training_worker import TrainingWorker
 from backend.exporter import export_to_onnx
+from backend.training_config import get_losses_for, get_all_optimizers
+from ui.plot_panel import PlotPanel
+from ui.monitor_panel import MonitorPanel
 
 
 class TrainingWindow(QMainWindow):
@@ -48,14 +53,9 @@ class TrainingWindow(QMainWindow):
         self._on_back_callback = on_back
         self.worker: TrainingWorker | None = None
 
-        # Plot data
-        self.plot_epochs = []
-        self.train_losses = []
-        self.val_losses = []
-
         self._init_window()
         self._build_ui()
-        self._setup_resource_monitor()
+        self.monitor_panel.start()
 
     def _init_window(self) -> None:
         self.setWindowTitle("Neural Network Builder — Training & Monitoring")
@@ -77,36 +77,41 @@ class TrainingWindow(QMainWindow):
         header_row.addWidget(header)
         header_row.addStretch()
 
-        self.lbl_resources = QLabel("CPU: 0% | RAM: 0% | VRAM: N/A")
-        self.lbl_resources.setStyleSheet("color: #8b949e; font-family: monospace; font-size: 13px;")
-        header_row.addWidget(self.lbl_resources)
+        self.monitor_panel = MonitorPanel()
+        header_row.addWidget(self.monitor_panel)
         root.addLayout(header_row)
 
         # ── Config Panel ──────────────────────────────────────────────
         config_row = QHBoxLayout()
         config_row.addWidget(self._build_hyperparams_panel())
+        config_row.addWidget(self._build_training_config_panel())
         config_row.addWidget(self._build_hardware_panel())
         root.addLayout(config_row)
 
         # ── Visuals & Logs ────────────────────────────────────────────
         visuals_row = QHBoxLayout()
         
-        # 1. PyQtGraph Plot
-        self.plot_widget = pg.PlotWidget()
-        self.plot_widget.setBackground('#0d1117')
-        self.plot_widget.setTitle("Loss Curve", color="#ffffff")
-        self.plot_widget.setLabel('left', 'Loss')
-        self.plot_widget.setLabel('bottom', 'Epoch')
-        self.plot_widget.addLegend()
-        self.train_line = self.plot_widget.plot(pen=pg.mkPen(color='#3fb950', width=2), name="Train Loss")
-        self.val_line = self.plot_widget.plot(pen=pg.mkPen(color='#58a6ff', width=2), name="Val Loss")
-        visuals_row.addWidget(self.plot_widget, stretch=2)
+        # 1. Plot Panel
+        is_classification = self.state.problem_type == "classification"
+        self.plot_panel = PlotPanel(is_classification=is_classification)
+        visuals_row.addWidget(self.plot_panel, stretch=2)
 
-        # 2. Text Logs
+        # 2. Tabs for Logs & Model Summary
+        self.tabs = QTabWidget()
+        self.tabs.setStyleSheet("QTabWidget::pane { border: 1px solid #30363d; background: #0d1117; }")
+        
         self.log_console = QTextEdit()
         self.log_console.setReadOnly(True)
-        self.log_console.setStyleSheet("font-family: monospace; background-color: #0d1117; color: #c9d1d9;")
-        visuals_row.addWidget(self.log_console, stretch=1)
+        self.log_console.setStyleSheet("font-family: monospace; background-color: #0d1117; color: #c9d1d9; border: none;")
+        
+        self.model_summary = QTextEdit()
+        self.model_summary.setReadOnly(True)
+        self.model_summary.setStyleSheet("font-family: monospace; background-color: #0d1117; color: #c9d1d9; border: none;")
+        
+        self.tabs.addTab(self.log_console, "Logs")
+        self.tabs.addTab(self.model_summary, "Model Summary")
+        
+        visuals_row.addWidget(self.tabs, stretch=1)
         
         root.addLayout(visuals_row, stretch=1)
 
@@ -138,6 +143,11 @@ class TrainingWindow(QMainWindow):
         self.btn_stop.setEnabled(False)
         self.btn_stop.clicked.connect(self._stop_training)
         btn_bar.addWidget(self.btn_stop)
+
+        self.btn_reset = QPushButton("🔄 Re-initialize Weights")
+        self.btn_reset.setMinimumHeight(40)
+        self.btn_reset.clicked.connect(self._reset_weights)
+        btn_bar.addWidget(self.btn_reset)
 
         self.btn_train = QPushButton("▶  Start Training")
         self.btn_train.setProperty("class", "primary")
@@ -181,12 +191,76 @@ class TrainingWindow(QMainWindow):
         lay.addStretch()
         return group
 
+    def _build_training_config_panel(self) -> QGroupBox:
+        """Build the Loss Function + Optimizer selection panel."""
+        group = QGroupBox("Training Configuration")
+        lay = QVBoxLayout(group)
+
+        # ── Loss function ────────────────────────────────────────────
+        lay.addWidget(QLabel("Loss Function:"))
+        self.combo_loss = QComboBox()
+        self._populate_loss_combo()
+        lay.addWidget(self.combo_loss)
+
+        # ── Optimizer ────────────────────────────────────────────────
+        lay.addSpacing(6)
+        lay.addWidget(QLabel("Optimizer:"))
+        self.combo_optimizer = QComboBox()
+        self.combo_optimizer.addItems(get_all_optimizers())
+        # Pre-select current state value
+        idx = self.combo_optimizer.findText(self.state.optimizer_name)
+        if idx >= 0:
+            self.combo_optimizer.setCurrentIndex(idx)
+        lay.addWidget(self.combo_optimizer)
+
+        lay.addStretch()
+        return group
+
+    def _populate_loss_combo(self) -> None:
+        """
+        (Re-)populate the loss combo filtered by the current problem type.
+
+        Called at construction time and again in :meth:`refresh_ui` in case
+        the user navigated back to Window 1 and changed the problem type.
+        """
+        problem_type = self.state.problem_type
+        losses = get_losses_for(problem_type)
+
+        self.combo_loss.blockSignals(True)
+        self.combo_loss.clear()
+        self.combo_loss.addItems(losses)
+        self.combo_loss.blockSignals(False)
+
+        # Restore previous selection when possible
+        idx = self.combo_loss.findText(self.state.loss_fn_name)
+        self.combo_loss.setCurrentIndex(idx if idx >= 0 else 0)
+
     def refresh_ui(self) -> None:
-        """Refresh hyperparameter fields from the current ProjectState."""
+        """Refresh all fields from the current ProjectState.
+
+        Called by ``PipelineController`` every time the user navigates
+        forward to Window 3, so changes made in earlier windows (e.g. a
+        different problem type selected in Window 1) are always reflected.
+        """
         self.spin_lr.setValue(self.state.hyperparams.get("lr", 0.001))
         self.spin_epochs.setValue(self.state.hyperparams.get("epochs", 50))
         self.spin_bs.setValue(self.state.hyperparams.get("batch_size", 32))
-        
+
+        # Re-populate loss combo — problem_type may have changed
+        self._populate_loss_combo()
+
+        # Update Plot Panel for potential problem type change
+        self.plot_panel.set_is_classification(self.state.problem_type == "classification")
+        self.plot_panel.clear()
+
+        # Update Model Summary
+        if self.state.model:
+            total_params = sum(p.numel() for p in self.state.model.parameters() if p.requires_grad)
+            summary_text = f"Total Trainable Parameters: {total_params:,}\n\nArchitecture:\n{self.state.model}"
+            self.model_summary.setText(summary_text)
+        else:
+            self.model_summary.setText("No model available.")
+
         # Reset progress and logs
         self.progress_bar.setValue(0)
         self.log_console.clear()
@@ -210,32 +284,53 @@ class TrainingWindow(QMainWindow):
         lay.addStretch()
         return group
 
-    def _setup_resource_monitor(self) -> None:
-        self.res_timer = QTimer(self)
-        self.res_timer.timeout.connect(self._update_resources)
-        self.res_timer.start(1000) # 1 sec
+    def _reset_weights(self) -> None:
+        """Rebuild the model to reset its weights to random initialization."""
+        from backend.model_builder import build_and_validate
+        if not self.state.blueprint or self.state.input_features() == 0:
+            QMessageBox.warning(self, "Reset Failed", "Blueprint or data is missing.")
+            return
 
-    def _update_resources(self) -> None:
-        cpu = psutil.cpu_percent()
-        ram = psutil.virtual_memory().percent
+        model, dummy_input, success, msg = build_and_validate(
+            self.state.blueprint, self.state.input_features()
+        )
         
-        vram_str = "N/A"
-        if torch.cuda.is_available():
-            # Allocated memory in MB
-            mem = torch.cuda.memory_allocated() / (1024 ** 2)
-            vram_str = f"{mem:.1f} MB"
+        if success:
+            self.state.model = model
+            self.state.dummy_tensor = dummy_input
+            
+            # Update Model Summary
+            total_params = sum(p.numel() for p in self.state.model.parameters() if p.requires_grad)
+            summary_text = f"Total Trainable Parameters: {total_params:,}\n\nArchitecture:\n{self.state.model}"
+            self.model_summary.setText(summary_text)
+            
+            # Notify user
+            self.log_console.append("\n" + "="*50)
+            self.log_console.append("🔄 Model weights have been re-initialized to random values.")
+            self.log_console.append("="*50 + "\n")
+            
+            # Reset UI progress
+            self.progress_bar.setValue(0)
+            self.plot_panel.clear()
+        else:
+            QMessageBox.warning(self, "Reset Failed", f"Could not rebuild model:\n{msg}")
 
-        self.lbl_resources.setText(f"CPU: {cpu}% | RAM: {ram}% | VRAM: {vram_str}")
+    # ── Removed old _setup_resource_monitor and _update_resources methods ──
 
     def _start_training(self) -> None:
-        # Sync state
+        # Sync hyperparams
         self.state.hyperparams["lr"] = self.spin_lr.value()
         self.state.hyperparams["epochs"] = self.spin_epochs.value()
         self.state.hyperparams["batch_size"] = self.spin_bs.value()
         self.state.device = self.combo_device.currentData()
 
+        # Sync loss / optimizer selection
+        self.state.loss_fn_name = self.combo_loss.currentText()
+        self.state.optimizer_name = self.combo_optimizer.currentText()
+
         # UI toggles
         self.btn_train.setEnabled(False)
+        self.btn_reset.setEnabled(False)
         if self._on_back_callback:
             self.btn_back.setEnabled(False)
         self.btn_stop.setEnabled(True)
@@ -244,11 +339,7 @@ class TrainingWindow(QMainWindow):
         self.log_console.clear()
 
         # Reset plots
-        self.plot_epochs.clear()
-        self.train_losses.clear()
-        self.val_losses.clear()
-        self.train_line.setData([], [])
-        self.val_line.setData([], [])
+        self.plot_panel.clear()
 
         # Start background worker
         self.worker = TrainingWorker(self.state)
@@ -274,16 +365,12 @@ class TrainingWindow(QMainWindow):
         pct = int(100 * current / max(1, total))
         self.progress_bar.setValue(pct)
 
-    def _on_epoch(self, epoch: int, t_loss: float, v_loss: float) -> None:
-        self.plot_epochs.append(epoch)
-        self.train_losses.append(t_loss)
-        self.val_losses.append(v_loss)
-        
-        self.train_line.setData(self.plot_epochs, self.train_losses)
-        self.val_line.setData(self.plot_epochs, self.val_losses)
+    def _on_epoch(self, epoch: int, t_loss: float, v_loss: float, metrics: dict | None = None) -> None:
+        self.plot_panel.add_data(epoch, t_loss, v_loss, metrics)
 
     def _on_finished(self, success: bool, msg: str) -> None:
         self.btn_train.setEnabled(True)
+        self.btn_reset.setEnabled(True)
         self.btn_stop.setEnabled(False)
         if self._on_back_callback:
             self.btn_back.setEnabled(True)

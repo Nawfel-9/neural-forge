@@ -43,7 +43,8 @@ def export_to_onnx(model: nn.Module, dummy_tensor: torch.Tensor, filepath: str) 
             do_constant_folding=True,
             input_names=['input'],
             output_names=['output'],
-            dynamic_axes={'input': {0: 'batch_size'}, 'output': {0: 'batch_size'}}
+            dynamic_axes={'input': {0: 'batch_size'}, 'output': {0: 'batch_size'}},
+            dynamo=False,  # Use TorchScript exporter; dynamo path requires onnxscript
         )
         return True, "Model successfully exported to ONNX format."
     except Exception as exc:

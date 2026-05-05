@@ -1,4 +1,4 @@
-# Phase 6 Walkthrough: Professional Refinements (Part 1)
+# Phase 6 Walkthrough: Professional Refinements
 
 ## Overview
 Post-Phase 5, we focused on transforming the "Neural Forge" prototype into a production-ready application by addressing UI bottlenecks and architectural fluidity.
@@ -18,7 +18,7 @@ Post-Phase 5, we focused on transforming the "Neural Forge" prototype into a pro
 - Refactored `main.py` to use a central `QStackedWidget` controlled by `PipelineController`.
 - **State Synchronization**: Integrated `refresh_data_info()` and `refresh_ui()` hooks that trigger automatically upon page switching, ensuring the Model Builder and Training Studio always have the latest dataset context.
 
-### 3. Automatic Label Encoding & Validation 🛠️
+### 3. Automatic Label Encoding & Validation
 **Problem**: Users often encountered the cryptic `Assertion t >= 0 && t < n_classes failed` error when their target labels weren't zero-indexed (e.g., [1, 2, 3]) or didn't match the model's output size.
 **Solution**:
 - **Auto-Encoding**: The `TrainingWorker` now automatically detects unique labels and maps them to the expected `[0, C-1]` range using `LabelEncoder`.

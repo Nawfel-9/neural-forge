@@ -14,10 +14,12 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
 from sklearn.preprocessing import LabelEncoder
+from sklearn.metrics import accuracy_score, f1_score
 from PyQt6.QtCore import QThread, pyqtSignal
 
 from utils.project_state import ProjectState
 from backend.data_handler import split_data_percentage, get_kfold_splitter
+from backend.training_config import build_loss, build_optimizer
 
 
 class TrainingWorker(QThread):
@@ -27,7 +29,7 @@ class TrainingWorker(QThread):
     """
 
     # Signals
-    epoch_finished = pyqtSignal(int, float, float)  # epoch, train_loss, val_loss
+    epoch_finished = pyqtSignal(int, float, float, dict)  # epoch, train_loss, val_loss, metrics
     batch_progress = pyqtSignal(int, int)  # current_batch, total_batches
     training_finished = pyqtSignal(bool, str)  # success, message
     log_message = pyqtSignal(str)
@@ -95,8 +97,14 @@ class TrainingWorker(QThread):
             epochs = hp.get("epochs", 50)
             batch_size = hp.get("batch_size", 32)
 
-            criterion = nn.CrossEntropyLoss() if problem_type == "classification" else nn.MSELoss()
-            optimizer = optim.Adam(model.parameters(), lr=lr)
+            criterion = build_loss(self.state.loss_fn_name)
+            optimizer = build_optimizer(
+                self.state.optimizer_name, model.parameters(), lr=lr
+            )
+            self.log_message.emit(
+                f"Loss: {self.state.loss_fn_name}  |  "
+                f"Optimizer: {self.state.optimizer_name}  |  lr={lr}"
+            )
 
             # 3. Handle splits
             split_cfg = self.state.split_config
@@ -186,15 +194,48 @@ class TrainingWorker(QThread):
             # Validation Phase
             model.eval()
             total_val_loss = 0.0
+            
+            all_preds = []
+            all_targets = []
+            
             with torch.no_grad():
                 for data, target in val_loader:
                     data, target = data.to(device), target.to(device)
                     output = model(data)
                     loss = criterion(output, target)
                     total_val_loss += loss.item() * data.size(0)
+                    
+                    if self.state.problem_type == "classification":
+                        # If output is (N, 1) or (N,), treat as binary logits. Else argmax.
+                        if output.ndim == 1 or output.shape[1] == 1:
+                            preds = (torch.sigmoid(output) >= 0.5).long().view(-1)
+                        else:
+                            preds = torch.argmax(output, dim=1)
+                        
+                        all_preds.extend(preds.cpu().numpy())
+                        all_targets.extend(target.cpu().numpy())
 
             avg_train_loss = total_train_loss / len(train_dataset)
             avg_val_loss = total_val_loss / len(val_dataset)
             
-            self.log_message.emit(f"{fold_msg}Epoch {epoch + 1}/{epochs} - Train Loss: {avg_train_loss:.4f} - Val Loss: {avg_val_loss:.4f}")
-            self.epoch_finished.emit(epoch + 1, avg_train_loss, avg_val_loss)
+            metrics = {}
+            if self.state.problem_type == "classification" and len(all_targets) > 0:
+                acc = accuracy_score(all_targets, all_preds)
+                # Determine average method for F1 (binary if 2 classes max, else macro)
+                unique_classes = len(np.unique(all_targets))
+                avg_method = 'binary' if unique_classes <= 2 else 'macro'
+                try:
+                    f1 = f1_score(all_targets, all_preds, average=avg_method, zero_division=0)
+                except ValueError:
+                    f1 = f1_score(all_targets, all_preds, average='macro', zero_division=0)
+                
+                metrics["val_acc"] = acc
+                metrics["val_f1"] = f1
+                self.log_message.emit(
+                    f"{fold_msg}Epoch {epoch + 1}/{epochs} - Train Loss: {avg_train_loss:.4f} "
+                    f"- Val Loss: {avg_val_loss:.4f} - Val Acc: {acc:.4f} - Val F1: {f1:.4f}"
+                )
+            else:
+                self.log_message.emit(f"{fold_msg}Epoch {epoch + 1}/{epochs} - Train Loss: {avg_train_loss:.4f} - Val Loss: {avg_val_loss:.4f}")
+            
+            self.epoch_finished.emit(epoch + 1, avg_train_loss, avg_val_loss, metrics)

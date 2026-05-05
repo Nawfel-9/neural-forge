@@ -62,6 +62,7 @@ class ModelBuilderWindow(QMainWindow):
 
         # Start with one default output layer
         self._add_layer_row()
+        self._update_output_layer()
 
     # ── Window setup ────────────────────────────────────────────────────────
     def _init_window(self) -> None:
@@ -97,8 +98,6 @@ class ModelBuilderWindow(QMainWindow):
         )
         self.lbl_data_info.setVisible(False)
         root.addWidget(self.lbl_data_info)
-        
-        self.refresh_data_info()
 
         # ── Scrollable layer list ───────────────────────────────────────────
         self.scroll_area = QScrollArea()
@@ -111,6 +110,41 @@ class ModelBuilderWindow(QMainWindow):
         self.layer_layout = QVBoxLayout(self.layer_container)
         self.layer_layout.setContentsMargins(0, 0, 0, 0)
         self.layer_layout.setSpacing(8)
+        
+        # ── Visual Input Layer (Immutable) ──────────────────────────────────
+        from PyQt6.QtWidgets import QFrame
+        self.input_layer_frame = QFrame()
+        self.input_layer_frame.setFrameShape(QFrame.Shape.Box)
+        self.input_layer_frame.setObjectName("inputLayerRow")
+        self.input_layer_frame.setStyleSheet("background-color: #161b22; border: 1px solid #30363d; border-radius: 4px;")
+        
+        in_layout = QHBoxLayout(self.input_layer_frame)
+        in_layout.setContentsMargins(12, 8, 12, 8)
+        in_layout.setSpacing(10)
+        
+        lbl_in_idx = QLabel("IN")
+        lbl_in_idx.setFixedWidth(32)
+        lbl_in_idx.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lbl_in_idx.setStyleSheet("font-weight: 700; color: #3fb950;")
+        in_layout.addWidget(lbl_in_idx)
+        
+        in_layout.addWidget(QLabel("Type:"))
+        lbl_type = QLabel("Input Features")
+        lbl_type.setStyleSheet("font-weight: 600; color: #c9d1d9;")
+        lbl_type.setFixedWidth(130)
+        in_layout.addWidget(lbl_type)
+        
+        self.lbl_in_features = QLabel("Features: ?")
+        self.lbl_in_features.setStyleSheet("color: #8b949e;")
+        in_layout.addWidget(self.lbl_in_features)
+        
+        in_layout.addStretch()
+        
+        lbl_locked = QLabel("🔒 Auto-Configured")
+        lbl_locked.setStyleSheet("color: #8b949e; font-size: 11px;")
+        in_layout.addWidget(lbl_locked)
+        
+        self.layer_layout.addWidget(self.input_layer_frame)
         self.layer_layout.addStretch()  # keeps rows top-aligned
 
         self.scroll_area.setWidget(self.layer_container)
@@ -172,6 +206,9 @@ class ModelBuilderWindow(QMainWindow):
         btn_bar.addWidget(self.btn_next)
 
         root.addLayout(btn_bar)
+        
+        # Finally refresh info label now that all widgets are instantiated
+        self.refresh_data_info()
 
     def refresh_data_info(self) -> None:
         """Update the data info label from the current ProjectState."""
@@ -184,8 +221,13 @@ class ModelBuilderWindow(QMainWindow):
                 f"Problem: {prob}"
             )
             self.lbl_data_info.setVisible(True)
+            self.lbl_in_features.setText(f"Features: {n_feat}")
+            
+            # Ensure the output layer is synced with the new dataset / problem type
+            self._update_output_layer()
         else:
             self.lbl_data_info.setVisible(False)
+            self.lbl_in_features.setText(f"Features: ?")
 
     # ── Layer management ────────────────────────────────────────────────────
     def _add_layer_row(self, config: dict | None = None) -> None:
@@ -201,6 +243,9 @@ class ModelBuilderWindow(QMainWindow):
         self.layer_layout.insertWidget(insert_pos, row)
         self._layer_rows.append(row)
         self._update_count_label()
+        
+        if not getattr(self, "_is_loading_blueprint", False):
+            self._update_output_layer()
 
     def _remove_layer_row(self, index: int) -> None:
         """Remove the row at *index* (or the sender row)."""
@@ -226,6 +271,7 @@ class ModelBuilderWindow(QMainWindow):
         row.deleteLater()
         self._reindex_rows()
         self._update_count_label()
+        self._update_output_layer()
 
     def _reindex_rows(self) -> None:
         for i, row in enumerate(self._layer_rows):
@@ -233,6 +279,22 @@ class ModelBuilderWindow(QMainWindow):
 
     def _update_count_label(self) -> None:
         self.lbl_count.setText(f"Layers: {len(self._layer_rows)}")
+
+    def _update_output_layer(self) -> None:
+        """Ensure the last layer is correctly locked as the output layer."""
+        if not self._layer_rows:
+            return
+            
+        num_classes = self.state.output_classes()
+        for i, row in enumerate(self._layer_rows):
+            is_last = (i == len(self._layer_rows) - 1)
+            row.set_is_output_layer(is_last, num_classes)
+            
+            # Disable remove button if it's the only layer
+            if is_last and len(self._layer_rows) == 1:
+                row.btn_remove.setEnabled(False)
+            else:
+                row.btn_remove.setEnabled(True)
 
     # ── Blueprint extraction ────────────────────────────────────────────────
     def get_architecture(self) -> list[dict]:
@@ -297,8 +359,14 @@ class ModelBuilderWindow(QMainWindow):
             self._clear_all_rows()
 
             # Rebuild from loaded config
-            for layer_cfg in layers:
-                self._add_layer_row(config=layer_cfg)
+            self._is_loading_blueprint = True
+            try:
+                for layer_cfg in layers:
+                    self._add_layer_row(config=layer_cfg)
+            finally:
+                self._is_loading_blueprint = False
+                
+            self._update_output_layer()
 
             QMessageBox.information(
                 self,

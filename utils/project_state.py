@@ -15,6 +15,8 @@ from typing import Any, Optional
 
 import pandas as pd
 
+from backend.training_config import DEFAULT_LOSS, DEFAULT_OPTIMIZER
+
 
 @dataclass
 class ProjectState:
@@ -44,6 +46,8 @@ class ProjectState:
         }
     )
     device: str = "cpu"              # "cpu" | "cuda" | "mps"
+    loss_fn_name: str = field(default_factory=lambda: DEFAULT_LOSS["classification"])
+    optimizer_name: str = field(default_factory=lambda: DEFAULT_OPTIMIZER)
 
     # ---- Convenience ----
     def input_features(self) -> int:
@@ -51,3 +55,12 @@ class ProjectState:
         if self.dataframe is None or not self.target_column:
             return 0
         return self.dataframe.shape[1] - 1
+
+    def output_classes(self) -> int:
+        """Return the required number of output neurons based on problem type."""
+        if self.dataframe is None or not self.target_column:
+            return 1
+        if self.problem_type == "classification":
+            import numpy as np
+            return len(np.unique(self.dataframe[self.target_column]))
+        return 1

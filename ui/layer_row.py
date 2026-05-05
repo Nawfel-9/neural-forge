@@ -216,6 +216,28 @@ class LayerRow(QFrame):
         self.row_index = index
         self.lbl_index.setText(f"#{index + 1}")
 
+    def set_is_output_layer(self, is_output: bool, num_classes: int = 1) -> None:
+        """Lock or unlock this layer as the final output layer."""
+        if is_output:
+            # Force Linear and exact neurons
+            idx = self.combo_type.findText("Linear")
+            if idx >= 0:
+                self.combo_type.setCurrentIndex(idx)
+            self.spin_neurons.setValue(num_classes)
+            
+            # Disable editing
+            self.combo_type.setEnabled(False)
+            self.spin_neurons.setEnabled(False)
+            self.lbl_neurons.setText("Neurons (Locked):")
+            self.lbl_index.setText(f"#{self.row_index + 1} (Output)")
+            self.lbl_index.setFixedWidth(70)
+        else:
+            self.combo_type.setEnabled(True)
+            self.spin_neurons.setEnabled(True)
+            self.lbl_neurons.setText("Neurons:")
+            self.lbl_index.setText(f"#{self.row_index + 1}")
+            self.lbl_index.setFixedWidth(32)
+
     def get_config(self) -> dict:
         """
         Return a blueprint dictionary for this layer.

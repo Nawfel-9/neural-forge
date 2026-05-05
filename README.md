@@ -28,6 +28,8 @@ Built with **PyQt6** (dark-themed UI) and **PyTorch** (ML backend), following a 
 | Real-time loss curve (pyqtgraph) | ✅ |
 | CPU/RAM/VRAM resource monitor | ✅ |
 | ONNX model export | ✅ |
+| Loss function selection (per problem type) | ✅ |
+| Optimizer selection (Adam, AdamW, SGD, RMSprop) | ✅ |
 | **Developer Mode** | |
 | Project import with folder picker | ✅ |
 | Project structure guide dialog (Don't show again) | ✅ |
@@ -70,7 +72,9 @@ python main.py
 python -m pytest tests/ -v
 ```
 
-**Current test results: 80/80 passing** (28 Phase 1 + 24 Phase 2 + 28 Phase 3)
+**Current test results: 127/127 passing** (28 Phase 1 + 24 Phase 2 + 28 Phase 3 + 47 Phase 4 + 7 Phase 5)
+
+> *Phase 4 and 5 counts include the expanded suite added alongside the Loss/Optimizer selection feature.*
 
 ---
 
@@ -126,7 +130,9 @@ python -m pytest tests/ -v
 | [Phase 3 Walkthrough](docs/walkthrough_phase3.md) | Blueprint → nn.Sequential, LazyLinear, ghost run — every function explained |
 | [Phase 4 Walkthrough](docs/walkthrough_phase4.md) | Training worker, threading, hardware selection — every function explained |
 | [Phase 5 Walkthrough](docs/walkthrough_phase5.md) | ONNX export, visualization, monitoring — every function explained |
+| [Refinements Walkthrough](docs/walkthrough_refinements.md) | UI/UX improvements, robustness, and workflow polish — every function explained |
 | [Dev Mode Walkthrough](docs/walkthrough_dev_mode.md) | HomeWindow, ProjectGuideDialog, config.yaml bridge, dual-path architecture |
+
 
 ---
 
@@ -155,9 +161,10 @@ Integrated `pyqtgraph` for real-time live loss curves, a `QTimer`-driven `psutil
 ## Architecture Highlights
 
 - **Decoupled design** — UI produces a standard blueprint (list of dicts), backend consumes it. Zero coupling.
+- **Training config registry** — `backend/training_config.py` is the single source of truth for losses and optimizers; UI and worker both consume it.
 - **Foolproof fallbacks** — Every user interaction wrapped in `try/except` with friendly `QMessageBox` dialogs.
 - **Thread-safe** — Training runs on `QThread` with `pyqtSignal` (Phase 4), never on the main GUI thread.
 - **Dark theme** — Comprehensive QSS + QPalette styling defined once in `styles.py`.
-- **Tested** — 80 automated tests across 3 phases, covering logic, I/O, validation, model building, and UI widgets.
+- **Tested** — 127 automated tests across 5 phases, covering logic, I/O, validation, model building, UI widgets, training config, and ONNX export.
 
 ---
