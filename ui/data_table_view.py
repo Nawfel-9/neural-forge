@@ -99,6 +99,7 @@ class DataPreviewTable(QWidget):
 
         self.table_view = QTableView()
         self.table_view.setAlternatingRowColors(True)
+        self.table_view.setShowGrid(False) # Disable grid lines for minimal look
         self.table_view.setSelectionBehavior(
             QTableView.SelectionBehavior.SelectRows
         )
@@ -106,7 +107,8 @@ class DataPreviewTable(QWidget):
         self.table_view.horizontalHeader().setSectionResizeMode(
             QHeaderView.ResizeMode.Interactive
         )
-        self.table_view.verticalHeader().setDefaultSectionSize(28)
+        self.table_view.verticalHeader().setVisible(False) # Hide vertical header
+        self.table_view.verticalHeader().setDefaultSectionSize(36) # Taller rows
         layout.addWidget(self.table_view)
 
         # Start with an empty model
