@@ -24,6 +24,7 @@ class ProjectState:
     dataframe: Optional[pd.DataFrame] = None
     target_column: str = ""
     problem_type: str = "classification"  # "classification" | "regression"
+    pipeline: Any = None  # Stores the preprocessing DataPipeline
     split_config: dict = field(
         default_factory=lambda: {"method": "percentage", "ratio": 0.8}
     )

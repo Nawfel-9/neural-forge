@@ -127,6 +127,21 @@ class TrainingWorker(QThread):
                 X_train, X_val = X[indices[:split_idx]], X[indices[split_idx:]]
                 y_train, y_val = y[indices[:split_idx]], y[indices[split_idx:]]
                 
+                # Resampling
+                resample = split_cfg.get("resample", "none")
+                if resample != "none" and problem_type == "classification":
+                    self.log_message.emit(f"Applying {resample.upper()} resampling to training set...")
+                    try:
+                        if resample == "smote":
+                            from imblearn.over_sampling import SMOTE
+                            X_train, y_train = SMOTE().fit_resample(X_train, y_train)
+                        elif resample == "undersample":
+                            from imblearn.under_sampling import RandomUnderSampler
+                            X_train, y_train = RandomUnderSampler().fit_resample(X_train, y_train)
+                        self.log_message.emit(f"Resampling successful. New training size: {len(X_train)}")
+                    except ImportError:
+                        self.log_message.emit("⚠️ imbalanced-learn is not installed. Skipping resampling. (pip install imbalanced-learn)")
+                
                 self._train_loop(
                     model, device, criterion, optimizer,
                     X_train, y_train, X_val, y_val,
@@ -149,9 +164,25 @@ class TrainingWorker(QThread):
                     self.log_message.emit(f"--- Starting Fold {fold + 1}/{k} ---")
                     model.load_state_dict(initial_weights) # Reset per fold
                     
+                    X_train, y_train = X[train_idx], y[train_idx]
+                    X_val, y_val = X[val_idx], y[val_idx]
+                    
+                    # Resampling
+                    resample = split_cfg.get("resample", "none")
+                    if resample != "none" and problem_type == "classification":
+                        try:
+                            if resample == "smote":
+                                from imblearn.over_sampling import SMOTE
+                                X_train, y_train = SMOTE().fit_resample(X_train, y_train)
+                            elif resample == "undersample":
+                                from imblearn.under_sampling import RandomUnderSampler
+                                X_train, y_train = RandomUnderSampler().fit_resample(X_train, y_train)
+                        except ImportError:
+                            pass # Already logged warning in fold 1
+                    
                     self._train_loop(
                         model, device, criterion, optimizer,
-                        X[train_idx], y[train_idx], X[val_idx], y[val_idx],
+                        X_train, y_train, X_val, y_val,
                         epochs, batch_size, fold_msg=f"[Fold {fold+1}] "
                     )
                     # For metrics, just take the last fold's validation set

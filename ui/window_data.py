@@ -149,7 +149,7 @@ class DataWindow(QWidget):
         
         form = QFormLayout()
         self.combo_nan = QComboBox()
-        self.combo_nan.addItems(["drop", "mean", "median", "mode"])
+        self.combo_nan.addItems(["drop", "mean", "median", "mode", "knn"])
         form.addRow("NaN Strategy:", self.combo_nan)
         
         self.combo_out_method = QComboBox()
@@ -233,6 +233,20 @@ class DataWindow(QWidget):
         ts_lay.addWidget(btn_ts)
         
         lay.addLayout(ts_lay)
+        lay.addSpacing(20)
+        
+        # Datetime Parsing
+        dt_lay = QVBoxLayout()
+        dt_lay.addWidget(QLabel("Date/Time Columns:"))
+        self.list_dt_cols = QListWidget()
+        self.list_dt_cols.setMaximumHeight(80)
+        dt_lay.addWidget(self.list_dt_cols)
+        
+        btn_dt = QPushButton("Extract Date Features")
+        btn_dt.clicked.connect(self._apply_datetime)
+        dt_lay.addWidget(btn_dt)
+        
+        lay.addLayout(dt_lay)
         return group
 
 
@@ -297,6 +311,7 @@ class DataWindow(QWidget):
             self._start_worker("profile", df=self.df)
         elif task == "preprocess":
             self.df = result
+            self.state.pipeline = report.get("pipeline")
             self.raw_data_table.set_dataframe(self.df.head(100))
             self.state.dataframe = self.df
             self.state.target_column = self.combo_target.currentText()
@@ -323,7 +338,7 @@ class DataWindow(QWidget):
         self.combo_fi_col2.clear()
         self.combo_fi_col2.addItems(cols)
         
-        for lst in [self.list_out_cols, self.list_ts_cols, self.list_features]:
+        for lst in [self.list_out_cols, self.list_ts_cols, self.list_features, self.list_dt_cols]:
             lst.clear()
             for col in cols:
                 item = QListWidgetItem(col)
@@ -351,6 +366,12 @@ class DataWindow(QWidget):
         if self.df is None: return
         ts_cols = [self.list_ts_cols.item(i).text() for i in range(self.list_ts_cols.count()) if self.list_ts_cols.item(i).checkState() == Qt.CheckState.Checked]
         self._start_worker("engineer", df=self.df, cyclical_cols=[], lag_cols=ts_cols, n_lags=self.spin_lags.value())
+
+    def _apply_datetime(self):
+        if self.df is None: return
+        dt_cols = [self.list_dt_cols.item(i).text() for i in range(self.list_dt_cols.count()) if self.list_dt_cols.item(i).checkState() == Qt.CheckState.Checked]
+        if not dt_cols: return
+        self._start_worker("engineer", df=self.df, datetime_cols=dt_cols)
 
     def _apply_preprocessing(self):
         if self.df is None: return

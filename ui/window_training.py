@@ -252,6 +252,7 @@ class TrainingWindow(QWidget):
         # ── Configuration Panel ──
         config_row = QHBoxLayout()
         config_row.addWidget(self._build_hyperparams_panel())
+        config_row.addWidget(self._build_splitting_panel())
         config_row.addWidget(self._build_hardware_panel())
         root.addLayout(config_row)
 
@@ -266,10 +267,16 @@ class TrainingWindow(QWidget):
         self.plot_widget.setTitle("Loss Curve", color="#0EA5E9")
         self.plot_widget.setLabel('left', 'Loss')
         self.plot_widget.setLabel('bottom', 'Epoch')
-        self.plot_widget.addLegend()
-        self.train_line = self.plot_widget.plot(pen=pg.mkPen(color='#10B981', width=2), name="Train Loss")
-        self.val_line = self.plot_widget.plot(pen=pg.mkPen(color='#0EA5E9', width=2), name="Val Loss")
-        visuals_row.addWidget(self.plot_widget, stretch=2)
+        self.train_line = self.plot_widget.plot(pen=pg.mkPen(color='#10B981', width=2))
+        self.val_line = self.plot_widget.plot(pen=pg.mkPen(color='#0EA5E9', width=2))
+        
+        plot_container = QVBoxLayout()
+        legend_lbl = QLabel('<span style="color:#10B981; font-weight:bold; font-size:14px;">● Train Loss</span> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span style="color:#0EA5E9; font-weight:bold; font-size:14px;">● Val Loss</span>')
+        legend_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        plot_container.addWidget(legend_lbl)
+        plot_container.addWidget(self.plot_widget)
+        
+        visuals_row.addLayout(plot_container, stretch=2)
 
         # Text Logs
         self.log_console = QTextEdit()
@@ -334,10 +341,71 @@ class TrainingWindow(QWidget):
         lay.addRow("Batch Size:", self.spin_bs)
         return group
 
+    def _build_splitting_panel(self) -> QGroupBox:
+        group = QGroupBox("Data Splitting")
+        self.split_lay = QFormLayout(group)
+        
+        self.combo_split_method = QComboBox()
+        self.combo_split_method.addItems(["percentage", "kfold"])
+        self.combo_split_method.currentTextChanged.connect(self._on_split_method_changed)
+        self.split_lay.addRow("Method:", self.combo_split_method)
+        
+        self.spin_split_ratio = QDoubleSpinBox()
+        self.spin_split_ratio.setRange(0.1, 0.99)
+        self.spin_split_ratio.setSingleStep(0.05)
+        self.spin_split_ratio.setValue(self.state.split_config.get("ratio", 0.8))
+        self.split_lay.addRow("Train Ratio:", self.spin_split_ratio)
+        
+        self.spin_kfold = QSpinBox()
+        self.spin_kfold.setRange(2, 20)
+        self.spin_kfold.setValue(self.state.split_config.get("k", 5))
+        self.split_lay.addRow("K-Folds:", self.spin_kfold)
+        
+        self.combo_resample = QComboBox()
+        self.combo_resample.addItems(["none", "smote", "undersample"])
+        self.combo_resample.setCurrentText(self.state.split_config.get("resample", "none"))
+        self.split_lay.addRow("Imbalanced Resampling:", self.combo_resample)
+        
+        self._on_split_method_changed(self.state.split_config.get("method", "percentage"))
+        return group
+
+    def _on_split_method_changed(self, method: str) -> None:
+        if method == "percentage":
+            self.spin_split_ratio.setVisible(True)
+            lbl = self.split_lay.labelForField(self.spin_split_ratio)
+            if lbl: lbl.setVisible(True)
+            
+            self.spin_kfold.setVisible(False)
+            lbl = self.split_lay.labelForField(self.spin_kfold)
+            if lbl: lbl.setVisible(False)
+        else:
+            self.spin_split_ratio.setVisible(False)
+            lbl = self.split_lay.labelForField(self.spin_split_ratio)
+            if lbl: lbl.setVisible(False)
+            
+            self.spin_kfold.setVisible(True)
+            lbl = self.split_lay.labelForField(self.spin_kfold)
+            if lbl: lbl.setVisible(True)
+
     def refresh_ui(self) -> None:
         self.spin_lr.setValue(self.state.hyperparams.get("lr", 0.001))
         self.spin_epochs.setValue(self.state.hyperparams.get("epochs", 50))
         self.spin_bs.setValue(self.state.hyperparams.get("batch_size", 32))
+        
+        sc = self.state.split_config
+        idx = self.combo_split_method.findText(sc.get("method", "percentage"))
+        if idx >= 0: self.combo_split_method.setCurrentIndex(idx)
+        if "ratio" in sc: self.spin_split_ratio.setValue(sc["ratio"])
+        if "k" in sc: self.spin_kfold.setValue(sc["k"])
+        idx_res = self.combo_resample.findText(sc.get("resample", "none"))
+        if idx_res >= 0: self.combo_resample.setCurrentIndex(idx_res)
+        
+        # Hide Imbalanced Resampling for Regression tasks
+        is_classification = self.state.problem_type != "regression"
+        self.combo_resample.setVisible(is_classification)
+        lbl = self.split_lay.labelForField(self.combo_resample)
+        if lbl: lbl.setVisible(is_classification)
+        
         self.progress_bar.setValue(0)
         self.btn_stop.setEnabled(False)
         self.btn_train.setEnabled(True)
@@ -384,6 +452,13 @@ class TrainingWindow(QWidget):
         self.state.hyperparams["epochs"] = self.spin_epochs.value()
         self.state.hyperparams["batch_size"] = self.spin_bs.value()
         self.state.device = self.combo_device.currentData()
+
+        method = self.combo_split_method.currentText()
+        resample = self.combo_resample.currentText()
+        if method == "percentage":
+            self.state.split_config = {"method": "percentage", "ratio": self.spin_split_ratio.value(), "resample": resample}
+        else:
+            self.state.split_config = {"method": "kfold", "k": self.spin_kfold.value(), "resample": resample}
 
         self.btn_train.setEnabled(False)
         self.btn_stop.setEnabled(True)

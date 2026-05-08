@@ -70,6 +70,13 @@ class DataLoaderWorker(QObject):
                 if lag_cols and n_lags > 0:
                     self.progress.emit(f"Generating {n_lags} lags for {len(lag_cols)} columns...")
                     df = add_lags(df, lag_cols, n_lags)
+                    
+                # Datetime
+                dt_cols = self.kwargs.get("datetime_cols", [])
+                if dt_cols:
+                    from backend.data_handler import parse_datetime_features
+                    self.progress.emit(f"Extracting datetime features from {len(dt_cols)} columns...")
+                    df = parse_datetime_features(df, dt_cols)
                 
                 self.finished.emit(df, {})
 

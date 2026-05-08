@@ -20,6 +20,7 @@ from sklearn.preprocessing import (
     StandardScaler, MinMaxScaler, OneHotEncoder, LabelEncoder,
     PowerTransformer, KBinsDiscretizer
 )
+from sklearn.impute import KNNImputer
 from sklearn.utils.class_weight import compute_class_weight
 from sklearn.decomposition import PCA
 
@@ -86,6 +87,13 @@ def handle_nan(df: pd.DataFrame, strategy: str, constant_val: Any = None) -> pd.
                     df[col] = df[col].fillna(mode_val[0])
             elif strategy == 'constant':
                 df[col] = df[col].fillna(constant_val)
+    
+    if strategy == 'knn':
+        num_cols = df.select_dtypes(include=[np.number]).columns
+        if len(num_cols) > 0:
+            imputer = KNNImputer(n_neighbors=5)
+            df[num_cols] = imputer.fit_transform(df[num_cols])
+            
     return df
 
 def handle_outliers(df: pd.DataFrame, columns: list[str], method: str = 'iqr', action: str = 'clip') -> pd.DataFrame:
@@ -132,6 +140,22 @@ def add_lags(df: pd.DataFrame, columns: list[str], n_lags: int) -> pd.DataFrame:
         for i in range(1, n_lags + 1):
             df[f'{col}_lag_{i}'] = df[col].shift(i)
     return df.dropna().reset_index(drop=True)
+
+def parse_datetime_features(df: pd.DataFrame, columns: list[str]) -> pd.DataFrame:
+    """Extract Year, Month, Day, DayOfWeek, and IsWeekend from string dates."""
+    df = df.copy()
+    for col in columns:
+        if col in df.columns:
+            # Coerce errors to NaT to avoid crashing on bad data
+            dt_series = pd.to_datetime(df[col], errors='coerce')
+            df[f'{col}_year'] = dt_series.dt.year
+            df[f'{col}_month'] = dt_series.dt.month
+            df[f'{col}_day'] = dt_series.dt.day
+            df[f'{col}_dayofweek'] = dt_series.dt.dayofweek
+            df[f'{col}_is_weekend'] = dt_series.dt.dayofweek.isin([5, 6]).astype(int)
+            # Drop the original string column
+            df = df.drop(columns=[col])
+    return df
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Pipeline & Preprocessing
