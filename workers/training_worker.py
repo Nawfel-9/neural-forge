@@ -2,7 +2,7 @@
 training_worker.py
 ==================
 Multithreaded training loop using PyQt6 QThread and PyTorch.
-Handles both percentage split and K-Fold cross validation.
+Calculates advanced evaluation metrics (F1, ROC-AUC, R2, etc.) post-training.
 """
 
 from __future__ import annotations
@@ -14,6 +14,10 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
 from sklearn.preprocessing import LabelEncoder
+from sklearn.metrics import (
+    accuracy_score, precision_score, recall_score, f1_score, roc_auc_score,
+    mean_squared_error, mean_absolute_error, r2_score
+)
 from PyQt6.QtCore import QThread, pyqtSignal
 
 from utils.project_state import ProjectState
@@ -23,12 +27,13 @@ from backend.data_handler import split_data_percentage, get_kfold_splitter
 class TrainingWorker(QThread):
     """
     Runs the PyTorch training loop in a background thread.
-    Emits signals to update the UI (progress, loss curves, logs).
+    Emits signals to update the UI (progress, loss curves, logs, metrics).
     """
 
     # Signals
     epoch_finished = pyqtSignal(int, float, float)  # epoch, train_loss, val_loss
     batch_progress = pyqtSignal(int, int)  # current_batch, total_batches
+    evaluation_finished = pyqtSignal(dict) # Contains computed metrics
     training_finished = pyqtSignal(bool, str)  # success, message
     log_message = pyqtSignal(str)
 
@@ -69,8 +74,6 @@ class TrainingWorker(QThread):
                 num_classes = len(unique_labels)
                 self.log_message.emit(f"Detected {num_classes} classes: {unique_labels.tolist()}")
                 
-                # Check model output neurons vs classes
-                # We can find the last linear layer's output features
                 last_linear = None
                 for module in model.modules():
                     if isinstance(module, nn.Linear):
@@ -88,6 +91,18 @@ class TrainingWorker(QThread):
                 self.log_message.emit("Labels encoded to range [0, C-1] successfully.")
             else:
                 y = y.astype(np.float32).reshape(-1, 1)
+                
+                last_linear = None
+                for module in model.modules():
+                    if isinstance(module, nn.Linear):
+                        last_linear = module
+                
+                if last_linear and last_linear.out_features != 1:
+                    error_msg = (f"Model output mismatch: The last layer has {last_linear.out_features} neurons, "
+                                 f"but regression requires exactly 1 neuron for the final output. "
+                                 f"Please go back to the Model Builder and adjust your last layer to have 1 neuron.")
+                    self.log_message.emit(f"❌ {error_msg}")
+                    raise ValueError(error_msg)
 
             # Hyperparams
             hp = self.state.hyperparams
@@ -100,6 +115,7 @@ class TrainingWorker(QThread):
 
             # 3. Handle splits
             split_cfg = self.state.split_config
+            final_X_val, final_y_val = None, None
             
             if split_cfg["method"] == "percentage":
                 ratio = split_cfg.get("ratio", 0.8)
@@ -116,14 +132,13 @@ class TrainingWorker(QThread):
                     X_train, y_train, X_val, y_val,
                     epochs, batch_size, fold_msg=""
                 )
+                final_X_val, final_y_val = X_val, y_val
                 
             elif split_cfg["method"] == "kfold":
                 k = split_cfg.get("k", 5)
                 self.log_message.emit(f"Data split: {k}-Fold Cross Validation")
                 splitter = get_kfold_splitter(k=k)
                 
-                # For basic visual tracking, we'll train on each fold but emit continuous epochs
-                # Or just reset model (for true k-fold evaluation). Here we reset model for each fold.
                 from copy import deepcopy
                 initial_weights = deepcopy(model.state_dict())
                 
@@ -139,8 +154,14 @@ class TrainingWorker(QThread):
                         X[train_idx], y[train_idx], X[val_idx], y[val_idx],
                         epochs, batch_size, fold_msg=f"[Fold {fold+1}] "
                     )
-                    
+                    # For metrics, just take the last fold's validation set
+                    final_X_val, final_y_val = X[val_idx], y[val_idx]
+
             if self._is_running:
+                # Calculate advanced evaluation metrics on the final validation set
+                if final_X_val is not None:
+                    self._evaluate_model(model, device, final_X_val, final_y_val, problem_type)
+
                 # Save final model state
                 self.state.model = model.cpu() # Return to CPU for safe keeping
                 self.training_finished.emit(True, "Training completed successfully.")
@@ -179,8 +200,6 @@ class TrainingWorker(QThread):
                 optimizer.step()
                 
                 total_train_loss += loss.item() * data.size(0)
-                
-                # Update progress
                 self.batch_progress.emit(batch_idx + 1, total_batches)
 
             # Validation Phase
@@ -198,3 +217,47 @@ class TrainingWorker(QThread):
             
             self.log_message.emit(f"{fold_msg}Epoch {epoch + 1}/{epochs} - Train Loss: {avg_train_loss:.4f} - Val Loss: {avg_val_loss:.4f}")
             self.epoch_finished.emit(epoch + 1, avg_train_loss, avg_val_loss)
+
+    def _evaluate_model(self, model, device, X_val, y_val, problem_type):
+        self.log_message.emit("Computing advanced evaluation metrics...")
+        model.eval()
+        with torch.no_grad():
+            t_X = torch.tensor(X_val).to(device)
+            outputs = model(t_X).cpu()
+            
+        y_true = y_val
+        metrics = {}
+        
+        try:
+            if problem_type == "classification":
+                probs = torch.softmax(outputs, dim=1).numpy()
+                y_pred = np.argmax(probs, axis=1)
+                
+                metrics["Accuracy"] = accuracy_score(y_true, y_pred)
+                # use average='weighted' to handle multi-class seamlessly
+                metrics["Precision"] = precision_score(y_true, y_pred, average="weighted", zero_division=0)
+                metrics["Recall"] = recall_score(y_true, y_pred, average="weighted", zero_division=0)
+                metrics["F1 Score"] = f1_score(y_true, y_pred, average="weighted", zero_division=0)
+                
+                try:
+                    # ROC-AUC needs probabilities. For binary, pass probs of class 1. For multi-class, pass all probs.
+                    if probs.shape[1] == 2:
+                        metrics["ROC-AUC"] = roc_auc_score(y_true, probs[:, 1])
+                    else:
+                        metrics["ROC-AUC"] = roc_auc_score(y_true, probs, multi_class="ovr", average="weighted")
+                except Exception as e:
+                    self.log_message.emit(f"Could not compute ROC-AUC: {e}")
+                    
+            else: # regression
+                y_pred = outputs.numpy().flatten()
+                y_true_flat = y_true.flatten()
+                
+                metrics["MSE"] = mean_squared_error(y_true_flat, y_pred)
+                metrics["RMSE"] = np.sqrt(metrics["MSE"])
+                metrics["MAE"] = mean_absolute_error(y_true_flat, y_pred)
+                metrics["R2 Score"] = r2_score(y_true_flat, y_pred)
+                
+            self.evaluation_finished.emit(metrics)
+            self.log_message.emit("Metrics computed successfully.")
+        except Exception as e:
+            self.log_message.emit(f"Error computing metrics: {e}")

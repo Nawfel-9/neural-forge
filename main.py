@@ -1,147 +1,171 @@
 import sys
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
-                             QHBoxLayout, QPushButton, QLabel,
-                             QFileDialog, QDialog, QStackedWidget)
-from PyQt6.QtCore import Qt
+                             QHBoxLayout, QPushButton, QLabel, QStackedWidget,
+                             QSpacerItem, QSizePolicy, QFrame)
+from PyQt6.QtCore import Qt, QSize
 from PyQt6.QtGui import QIcon, QPixmap
 
-from ui.styles import DARK_QSS, apply_dark_palette
+from ui.styles import apply_theme_palette, get_qss
 from ui.window_data import DataWindow
 from ui.window_model import ModelBuilderWindow
 from ui.window_training import TrainingWindow
-from ui.window_project_guide import ProjectGuideDialog
+from ui.window_export import ExportWindow
+from ui.custom_toggle import PremiumToggle
 from utils.project_state import ProjectState
 
-class HomeWindow(QWidget):
-    """Entry point for the application."""
-    def __init__(self, on_no_code, on_import_code):
+class HomeDashboard(QWidget):
+    """Welcome screen for the new dashboard."""
+    def __init__(self, start_callback):
         super().__init__()
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(50, 50, 50, 50)
-        layout.setSpacing(0)
-
-        # Logo Image
+        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
         logo_label = QLabel()
         pixmap = QPixmap("assets/logo.png")
         if not pixmap.isNull():
-            scaled_pixmap = pixmap.scaled(250, 250, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            scaled_pixmap = pixmap.scaled(200, 200, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
             logo_label.setPixmap(scaled_pixmap)
         logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(logo_label)
-
-        layout.addSpacing(5)
 
         title = QLabel("NEURAL FORGE")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         title.setStyleSheet("font-size: 32pt; font-weight: 800; letter-spacing: 4px; color: #00A3FF;")
         layout.addWidget(title)
         
-        layout.addSpacing(2)
-
-        subtitle = QLabel("The Future of Visual Deep Learning")
-        subtitle.setStyleSheet("color: #94A3B8; font-size: 14pt; font-weight: 500;")
+        subtitle = QLabel("Premium Data Science & Deep Learning Platform")
+        subtitle.setStyleSheet("color: #64748B; font-size: 14pt; font-weight: 500; margin-bottom: 30px;")
         subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(subtitle)
+
+        btn_start = QPushButton("Initialize Project Environment")
+        btn_start.setProperty("class", "primary")
+        btn_start.setFixedSize(300, 50)
+        btn_start.setStyleSheet("font-size: 12pt; font-weight: 700;")
+        btn_start.clicked.connect(start_callback)
+        layout.addWidget(btn_start, alignment=Qt.AlignmentFlag.AlignCenter)
+
+
+class NeuralForgeApp(QMainWindow):
+    """Main application window with persistent sidebar and content stack."""
+    def __init__(self):
+        super().__init__()
+        self.state = ProjectState()
+        self.is_dark_mode = True
         
-        layout.addSpacing(50)
+        self.setWindowTitle("Neural Forge — Enterprise Edition")
+        self.setWindowIcon(QIcon("assets/logo.png"))
+        self.resize(1200, 800)
+        
+        self._init_ui()
+        self._apply_current_theme()
 
-        btn_layout = QHBoxLayout()
+    def _init_ui(self):
+        central = QWidget()
+        self.setCentralWidget(central)
+        main_layout = QHBoxLayout(central)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
 
-        self.btn_no_code = QPushButton("NO-CODE PIPELINE\n(Visual Editor)")
-        self.btn_no_code.setFixedSize(280, 200)
-        self.btn_no_code.setProperty("class", "primary")
-        self.btn_no_code.setStyleSheet("font-size: 11pt; font-weight: 700; letter-spacing: 1px;")
-        self.btn_no_code.clicked.connect(on_no_code)
+        # ── Sidebar ──
+        self.sidebar = QWidget()
+        self.sidebar.setObjectName("Sidebar")
+        self.sidebar.setFixedWidth(240)
+        sidebar_layout = QVBoxLayout(self.sidebar)
+        sidebar_layout.setContentsMargins(0, 20, 0, 20)
+        sidebar_layout.setSpacing(8)
 
-        self.btn_code = QPushButton("IMPORT PROJECT\n(Developer Mode)")
-        self.btn_code.setFixedSize(280, 200)
-        self.btn_code.setStyleSheet("font-size: 11pt; font-weight: 700; letter-spacing: 1px;")
-        self.btn_code.clicked.connect(on_import_code)
+        # Sidebar Header
+        sidebar_header = QLabel(" NEURAL FORGE")
+        sidebar_header.setStyleSheet("font-weight: 800; font-size: 14pt; letter-spacing: 1px; padding-left: 16px; margin-bottom: 20px;")
+        sidebar_layout.addWidget(sidebar_header)
 
-        btn_layout.addStretch()
-        btn_layout.addWidget(self.btn_no_code)
-        btn_layout.addSpacing(32)
-        btn_layout.addWidget(self.btn_code)
-        btn_layout.addStretch()
-        layout.addLayout(btn_layout)
-        layout.addStretch()
+        # Navigation Buttons
+        self.nav_buttons = []
+        nav_items = [
+            ("Home", 0),
+            ("Data Lab", 1),
+            ("Model Builder", 2),
+            ("Train & Evaluate", 3),
+            ("Export", 4)
+        ]
 
-        footer = QLabel("Designed for High-Performance Deep Learning Engineering")
-        footer.setStyleSheet("color: #475569; font-size: 9pt; letter-spacing: 0.5px;")
-        footer.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(footer)
+        for text, index in nav_items:
+            btn = QPushButton(f"  {text}")
+            btn.setProperty("class", "SidebarButton")
+            btn.clicked.connect(lambda checked, idx=index: self._switch_tab(idx))
+            self.nav_buttons.append(btn)
+            sidebar_layout.addWidget(btn)
 
-class PipelineController:
-    """Manages window stack and state transitions."""
+        sidebar_layout.addStretch()
 
-    def __init__(self, state: ProjectState) -> None:
-        self.state = state
+        # Theme Toggle
+        self.btn_theme = PremiumToggle(is_dark_mode=self.is_dark_mode)
+        self.btn_theme.toggled.connect(self._on_theme_toggled)
+        
+        # Center the toggle in the layout
+        toggle_layout = QHBoxLayout()
+        toggle_layout.addStretch()
+        toggle_layout.addWidget(self.btn_theme)
+        toggle_layout.addStretch()
+        sidebar_layout.addLayout(toggle_layout)
+
+        main_layout.addWidget(self.sidebar)
+
+        # ── Content Stack ──
         self.stack = QStackedWidget()
-        self.stack.setWindowTitle("Neural Forge")
-        self.stack.setWindowIcon(QIcon("assets/logo.png"))
-        self.stack.resize(1000, 750)
+        
+        # Initialize dashboards
+        self.home_dash = HomeDashboard(start_callback=lambda: self._switch_tab(1))
+        self.data_dash = DataWindow(self.state, on_next=lambda: self._switch_tab(2))
+        self.model_dash = ModelBuilderWindow(self.state, on_back=lambda: self._switch_tab(1), on_next=lambda: self._switch_tab(3))
+        self.train_dash = TrainingWindow(self.state, on_back=lambda: self._switch_tab(2))
+        self.export_dash = ExportWindow(self.state)
+        
+        self.stack.addWidget(self.home_dash)   # 0
+        self.stack.addWidget(self.data_dash)   # 1
+        self.stack.addWidget(self.model_dash)  # 2
+        self.stack.addWidget(self.train_dash)  # 3
+        self.stack.addWidget(self.export_dash) # 4
 
-        # ── Initialize Windows ──
-        self.home_win = HomeWindow(
-            on_no_code=self._start_no_code_pipeline,
-            on_import_code=self._open_code_editor
-        )
-        self.data_win = DataWindow(self.state, on_next=self._open_model_window)
-        self.model_win = ModelBuilderWindow(self.state, on_back=self._back_to_data, on_next=self._open_training_window)
-        self.train_win = TrainingWindow(self.state, on_back=self._back_to_model)
+        main_layout.addWidget(self.stack, stretch=1)
 
-        # Add to stack
-        self.stack.addWidget(self.home_win)
-        self.stack.addWidget(self.data_win)
-        self.stack.addWidget(self.model_win)
-        self.stack.addWidget(self.train_win)
+        # Set initial state
+        self._switch_tab(0)
 
-    def start(self) -> None:
-        self.stack.setCurrentWidget(self.home_win)
-        self.stack.show()
+    def _switch_tab(self, index: int):
+        # Specific refresh logic before switching
+        if index == 2:
+            self.model_dash.refresh_data_info()
+        elif index == 3:
+            self.train_dash.refresh_ui()
+        elif index == 4:
+            self.export_dash.refresh_status()
 
-    def _start_no_code_pipeline(self) -> None:
-        self.stack.setCurrentWidget(self.data_win)
+        self.stack.setCurrentIndex(index)
+        
+        # Update active state of sidebar buttons
+        for i, btn in enumerate(self.nav_buttons):
+            if i == index:
+                btn.setProperty("active", "true")
+            else:
+                btn.setProperty("active", "false")
+            # Force style re-evaluation
+            btn.style().unpolish(btn)
+            btn.style().polish(btn)
 
-    def _open_model_window(self) -> None:
-        self.model_win.refresh_data_info()
-        self.stack.setCurrentWidget(self.model_win)
+    def _on_theme_toggled(self, is_dark: bool):
+        self.is_dark_mode = is_dark
+        self._apply_current_theme()
 
-    def _back_to_data(self) -> None:
-        self.stack.setCurrentWidget(self.data_win)
-
-    def _open_training_window(self) -> None:
-        self.train_win.refresh_ui()
-        self.stack.setCurrentWidget(self.train_win)
-
-    def _back_to_model(self) -> None:
-        self.stack.setCurrentWidget(self.model_win)
-
-    def _open_code_editor(self) -> None:
-        if ProjectGuideDialog.should_show():
-            dlg = ProjectGuideDialog(parent=self.stack)
-            if dlg.exec() != QDialog.DialogCode.Accepted:
-                return
-
-        project_dir = QFileDialog.getExistingDirectory(
-            self.stack,
-            "Select your project folder",
-            "",
-            QFileDialog.Option.ShowDirsOnly,
-        )
-        if project_dir:
-            print(f"[Developer Mode] Project folder selected: {project_dir}")
+    def _apply_current_theme(self):
+        apply_theme_palette(QApplication.instance(), self.is_dark_mode)
+        self.setStyleSheet(get_qss(self.is_dark_mode))
 
 def main() -> None:
     app = QApplication(sys.argv)
-    app.setWindowIcon(QIcon("assets/logo.png"))
-    apply_dark_palette(app)
-    app.setStyleSheet(DARK_QSS)
-
-    state = ProjectState()
-    controller = PipelineController(state)
-    controller.start()
-
+    window = NeuralForgeApp()
+    window.show()
     sys.exit(app.exec())
 
 if __name__ == "__main__":

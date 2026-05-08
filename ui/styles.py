@@ -1,228 +1,299 @@
 """
 styles.py
 =========
-"Glassmorphism Expert" Theme for Neural Forge.
-Inspired by high-end SaaS and professional creative suites.
+"Premium SaaS" Theme for Neural Forge.
+Supports dynamic Light and Dark mode toggling.
 """
 
-from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor, QPalette
 from PyQt6.QtWidgets import QApplication
 
+# ─── Dark Mode Tokens ("Deep Night") ───
+DARK_BG_SPACE     = "#0B0F17"
+DARK_BG_SIDEBAR   = "#111827"
+DARK_BG_GLASS     = "rgba(30, 41, 59, 0.6)"
+DARK_BG_CARD      = "rgba(15, 23, 42, 0.4)"
+DARK_BG_INPUT     = "rgba(15, 23, 42, 0.6)"
+DARK_BORDER       = "rgba(255, 255, 255, 0.08)"
+DARK_BORDER_FOCUS = "#38BDF8"
+DARK_TEXT_MAIN    = "#F1F5F9"
+DARK_TEXT_MUTED   = "#64748B"
+DARK_ACCENT       = "#0EA5E9"
+DARK_ACCENT_GLOW  = "rgba(14, 165, 233, 0.15)"
+DARK_SUCCESS      = "#10B981"
+DARK_DANGER       = "#EF4444"
 
-# ─── Colour tokens (SaaS Premium Palette) ──────────────────────────────────
-BG_SPACE     = "#0B0F17"  # Deep Onyx
-BG_GLASS     = "rgba(30, 41, 59, 0.7)"  # Slate Glass
-BG_INPUT     = "rgba(15, 23, 42, 0.6)"  # Deep Input
-BORDER       = "rgba(255, 255, 255, 0.12)"
-BORDER_FOCUS = "#38BDF8"  # Sky Blue
-TEXT_MAIN    = "#F1F5F9"  # Slate 100
-TEXT_MUTED   = "#94A3B8"  # Slate 400
-ACCENT       = "#0EA5E9"  # Sky 500
-ACCENT_GLOW  = "rgba(14, 165, 233, 0.15)"
-SUCCESS      = "#10B981"  # Emerald 500
-SUCCESS_GLOW = "rgba(16, 185, 129, 0.15)"
-RADIUS       = "16px"
-RADIUS_SM    = "8px"
+# ─── Light Mode Tokens ("Clean Glass") ───
+LIGHT_BG_SPACE     = "#F8FAFC"
+LIGHT_BG_SIDEBAR   = "#FFFFFF"
+LIGHT_BG_GLASS     = "rgba(255, 255, 255, 0.8)"
+LIGHT_BG_CARD      = "#FFFFFF"
+LIGHT_BG_INPUT     = "#F1F5F9"
+LIGHT_BORDER       = "rgba(0, 0, 0, 0.08)"
+LIGHT_BORDER_FOCUS = "#0EA5E9"
+LIGHT_TEXT_MAIN    = "#0F172A"
+LIGHT_TEXT_MUTED   = "#64748B"
+LIGHT_ACCENT       = "#0284C7"
+LIGHT_ACCENT_GLOW  = "rgba(2, 132, 199, 0.1)"
+LIGHT_SUCCESS      = "#059669"
+LIGHT_DANGER       = "#DC2626"
 
+RADIUS       = "12px"
+RADIUS_SM    = "6px"
 
-def apply_dark_palette(app: QApplication) -> None:
-    """Set a deep space QPalette on the application."""
+def apply_theme_palette(app: QApplication, is_dark: bool = True) -> None:
+    """Set the QPalette on the application based on the theme."""
     palette = QPalette()
-    palette.setColor(QPalette.ColorRole.Window, QColor(BG_SPACE))
-    palette.setColor(QPalette.ColorRole.WindowText, QColor(TEXT_MAIN))
-    palette.setColor(QPalette.ColorRole.Base, QColor(BG_SPACE))
-    palette.setColor(QPalette.ColorRole.AlternateBase, QColor(BG_GLASS))
-    palette.setColor(QPalette.ColorRole.ToolTipBase, QColor(BG_GLASS))
-    palette.setColor(QPalette.ColorRole.ToolTipText, QColor(TEXT_MAIN))
-    palette.setColor(QPalette.ColorRole.Text, QColor(TEXT_MAIN))
-    palette.setColor(QPalette.ColorRole.Button, QColor(BG_GLASS))
-    palette.setColor(QPalette.ColorRole.ButtonText, QColor(TEXT_MAIN))
-    palette.setColor(QPalette.ColorRole.BrightText, QColor(ACCENT))
-    palette.setColor(QPalette.ColorRole.Link, QColor(ACCENT))
-    palette.setColor(QPalette.ColorRole.Highlight, QColor(ACCENT))
-    palette.setColor(QPalette.ColorRole.HighlightedText, QColor(BG_SPACE))
+    
+    bg_space = DARK_BG_SPACE if is_dark else LIGHT_BG_SPACE
+    text_main = DARK_TEXT_MAIN if is_dark else LIGHT_TEXT_MAIN
+    bg_glass = DARK_BG_GLASS if is_dark else LIGHT_BG_GLASS
+    accent = DARK_ACCENT if is_dark else LIGHT_ACCENT
+    text_muted = DARK_TEXT_MUTED if is_dark else LIGHT_TEXT_MUTED
 
-    # Disabled colours
-    palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.WindowText, QColor(TEXT_MUTED))
+    palette.setColor(QPalette.ColorRole.Window, QColor(bg_space))
+    palette.setColor(QPalette.ColorRole.WindowText, QColor(text_main))
+    palette.setColor(QPalette.ColorRole.Base, QColor(bg_space))
+    
+    # QColor constructor cannot parse "rgba()" strings, returning black. 
+    # Use hex colors for AlternateBase to fix the pitch-black row bug.
+    alt_base = "#121A28" if is_dark else "#F1F5F9"
+    palette.setColor(QPalette.ColorRole.AlternateBase, QColor(alt_base))
+    
+    # Tooltips can still use the glass color if we want, but since QColor 
+    # fails on rgba(), let's use a solid hex for ToolTipBase too.
+    tt_base = "#1E293B" if is_dark else "#FFFFFF"
+    palette.setColor(QPalette.ColorRole.ToolTipBase, QColor(tt_base))
+    palette.setColor(QPalette.ColorRole.ToolTipText, QColor(text_main))
+    palette.setColor(QPalette.ColorRole.Text, QColor(text_main))
+    btn_bg = "#1E293B" if is_dark else "#E2E8F0"
+    palette.setColor(QPalette.ColorRole.Button, QColor(btn_bg))
+    palette.setColor(QPalette.ColorRole.ButtonText, QColor(text_main))
+    palette.setColor(QPalette.ColorRole.BrightText, QColor(accent))
+    palette.setColor(QPalette.ColorRole.Link, QColor(accent))
+    palette.setColor(QPalette.ColorRole.Highlight, QColor(accent))
+    palette.setColor(QPalette.ColorRole.HighlightedText, QColor(bg_space))
+
+    palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.WindowText, QColor(text_muted))
     app.setPalette(palette)
 
 
-# ─── QSS stylesheet ─────────────────────────────────────────────────────────
-DARK_QSS = f"""
+def get_qss(is_dark: bool = True) -> str:
+    bg_space     = DARK_BG_SPACE if is_dark else LIGHT_BG_SPACE
+    bg_sidebar   = DARK_BG_SIDEBAR if is_dark else LIGHT_BG_SIDEBAR
+    bg_card      = DARK_BG_CARD if is_dark else LIGHT_BG_CARD
+    bg_input     = DARK_BG_INPUT if is_dark else LIGHT_BG_INPUT
+    border       = DARK_BORDER if is_dark else LIGHT_BORDER
+    border_focus = DARK_BORDER_FOCUS if is_dark else LIGHT_BORDER_FOCUS
+    text_main    = DARK_TEXT_MAIN if is_dark else LIGHT_TEXT_MAIN
+    text_muted   = DARK_TEXT_MUTED if is_dark else LIGHT_TEXT_MUTED
+    accent       = DARK_ACCENT if is_dark else LIGHT_ACCENT
+    success      = DARK_SUCCESS if is_dark else LIGHT_SUCCESS
+    danger       = DARK_DANGER if is_dark else LIGHT_DANGER
+    
+    hover_overlay = "rgba(255, 255, 255, 0.05)" if is_dark else "rgba(0, 0, 0, 0.03)"
+    pressed_overlay = "rgba(255, 255, 255, 0.1)" if is_dark else "rgba(0, 0, 0, 0.06)"
+
+    return f"""
 /* ── Global ────────────────────────────────────────────────────────────── */
 QWidget {{
     background-color: transparent;
-    color: {TEXT_MAIN};
+    color: {text_main};
     font-family: "Outfit", "Inter", "Segoe UI", sans-serif;
     font-size: 10pt;
     outline: none;
 }}
 
 QMainWindow, QDialog, QStackedWidget {{
-    background-color: {BG_SPACE};
+    background-color: {bg_space};
 }}
 
-/* ── Tab Widget (Modern Segmented Control) ──────────────────────────────── */
-QTabWidget::pane {{
-    border: 1px solid {BORDER};
-    border-radius: {RADIUS};
-    background-color: {BG_GLASS};
-    top: -1px;
+/* ── Sidebar & Navigation ──────────────────────────────────────────────── */
+QWidget#Sidebar {{
+    background-color: {bg_sidebar};
+    border-right: 1px solid {border};
 }}
 
-QTabBar {{
+QPushButton.SidebarButton {{
+    text-align: left;
+    padding: 12px 16px;
     background: transparent;
-    qproperty-drawBase: 0;
+    border: none;
+    border-radius: {RADIUS_SM};
+    color: {text_muted};
+    font-weight: 600;
+    font-size: 11pt;
 }}
 
-QTabBar::tab {{
-    background: {BG_INPUT};
-    color: {TEXT_MUTED};
-    padding: 10px 20px;
-    margin-right: 4px;
-    margin-bottom: 8px;
+QPushButton.SidebarButton:hover {{
+    background: {hover_overlay};
+    color: {text_main};
+}}
+
+QPushButton.SidebarButton[active="true"] {{
+    background: {bg_input};
+    color: {accent};
+    font-weight: 800;
+    border-left: 4px solid {accent};
+    border-radius: 0px;
+    border-top-right-radius: {RADIUS_SM};
+    border-bottom-right-radius: {RADIUS_SM};
+}}
+
+QPushButton.ThemeToggle {{
+    text-align: center;
+    padding: 10px 16px;
+    background: {bg_input};
+    border: 1px solid {border};
+    border-radius: {RADIUS};
+    color: {text_main};
     font-weight: 700;
-    font-size: 9pt;
-    border-radius: {RADIUS_SM};
-    text-transform: uppercase;
-    letter-spacing: 0.8px;
-    border: 1px solid {BORDER};
+    font-size: 10pt;
+    margin: 0px 12px;
 }}
 
-QTabBar::tab:hover {{
-    color: {TEXT_MAIN};
-    background: rgba(255, 255, 255, 0.05);
-    border-color: rgba(255, 255, 255, 0.2);
+QPushButton.ThemeToggle:hover {{
+    background: {hover_overlay};
+    border-color: {border_focus};
+    color: {accent};
 }}
 
-QTabBar::tab:selected {{
-    color: {TEXT_MAIN};
-    background: {ACCENT};
-    border: 1px solid {ACCENT};
+/* ── Typography ────────────────────────────────────────────────────────── */
+QLabel.PageTitle {{
+    font-size: 24pt;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+}}
+QLabel.PageSubtitle {{
+    font-size: 11pt;
+    color: {text_muted};
 }}
 
-/* ── Group Box (Elegant Cards) ─────────────────────────────────────────── */
+/* ── Group Box (Dashboard Cards) ───────────────────────────────────────── */
 QGroupBox {{
-    background-color: rgba(255, 255, 255, 0.02);
-    border: 1px solid {BORDER};
-    border-radius: {RADIUS_SM};
-    margin-top: 28px;
-    padding-top: 20px;
+    background-color: {bg_card};
+    border: 1px solid {border};
+    border-radius: {RADIUS};
+    margin-top: 20px;
+    padding-top: 18px;
     padding-bottom: 12px;
-    padding-left: 12px;
-    padding-right: 12px;
+    padding-left: 16px;
+    padding-right: 16px;
 }}
 
 QGroupBox::title {{
     subcontrol-origin: margin;
     subcontrol-position: top left;
     left: 16px;
-    top: 6px;
-    padding: 2px 10px;
-    color: {ACCENT};
+    top: 0px;
+    padding: 2px 8px;
+    color: {accent};
     font-weight: 800;
     text-transform: uppercase;
     font-size: 8pt;
     letter-spacing: 1px;
-    background-color: {BG_SPACE};
+    background-color: {bg_space};
     border-radius: 4px;
-    border: 1px solid {BORDER};
+    border: 1px solid {border};
 }}
 
-/* ── Buttons (Premium SaaS) ────────────────────────────────────────────── */
+/* ── Buttons ───────────────────────────────────────────────────────────── */
 QPushButton {{
-    background-color: {BG_INPUT};
-    color: {TEXT_MAIN};
-    border: 1px solid {BORDER};
+    background-color: {bg_input};
+    color: {text_main};
+    border: 1px solid {border};
     border-radius: {RADIUS_SM};
-    padding: 10px 20px;
-    font-weight: 700;
-    min-height: 32px;
+    padding: 8px 16px;
+    font-weight: 600;
+    min-height: 20px;
 }}
 
 QPushButton:hover {{
-    background-color: rgba(255, 255, 255, 0.08);
-    border-color: {BORDER_FOCUS};
+    background-color: {hover_overlay};
+    border-color: {border_focus};
 }}
 
 QPushButton:pressed {{
-    background-color: rgba(255, 255, 255, 0.12);
+    background-color: {pressed_overlay};
 }}
 
 QPushButton[class="primary"] {{
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {ACCENT}, stop:1 #0284C7);
+    background-color: {accent};
     color: #FFFFFF;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: none;
 }}
 
 QPushButton[class="primary"]:hover {{
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #38BDF8, stop:1 {ACCENT});
-    border-color: rgba(255, 255, 255, 0.3);
+    background-color: {border_focus};
 }}
 
-/* ── Inputs (High Contrast & Clear) ───────────────────────────────────── */
-QSpinBox, QDoubleSpinBox, QComboBox, QLineEdit, QListWidget, QTextEdit {{
-    background-color: {BG_INPUT};
-    color: {TEXT_MAIN};
-    border: 1px solid {BORDER};
+QPushButton[class="danger"] {{
+    background-color: transparent;
+    color: {text_muted};
+    border: 1px solid transparent;
+    font-size: 18pt;
+    font-weight: 300;
+    padding: 0px;
+    margin: 0px;
+}}
+
+QPushButton[class="danger"]:hover {{
+    background-color: rgba(220, 38, 38, 0.08);
+    color: {danger};
+    border: 1px solid rgba(220, 38, 38, 0.3);
     border-radius: {RADIUS_SM};
-    padding: 8px 12px;
-    min-height: 38px;
-    selection-background-color: {ACCENT};
+}}
+
+/* ── Inputs ────────────────────────────────────────────────────────────── */
+QSpinBox, QDoubleSpinBox, QComboBox, QLineEdit, QListWidget, QTextEdit {{
+    background-color: {bg_input};
+    color: {text_main};
+    border: 1px solid {border};
+    border-radius: {RADIUS_SM};
+    padding: 6px 8px;
+    min-height: 20px;
+    selection-background-color: {accent};
+    selection-color: #ffffff;
 }}
 
 QSpinBox:hover, QDoubleSpinBox:hover, QComboBox:hover, QLineEdit:hover, QListWidget:hover {{
-    border-color: rgba(255, 255, 255, 0.2);
+    border-color: {border_focus};
 }}
 
 QSpinBox:focus, QDoubleSpinBox:focus, QComboBox:focus, QLineEdit:focus, QListWidget:focus {{
-    border-color: {BORDER_FOCUS};
-    background-color: rgba(15, 23, 42, 0.8);
+    border-color: {border_focus};
+    background-color: {bg_space};
 }}
 
-QComboBox::drop-down {{
-    border: none;
-    width: 30px;
-}}
-
-QComboBox::down-arrow {{
-    image: none;
-    border-left: 5px solid transparent;
-    border-right: 5px solid transparent;
-    border-top: 5px solid {TEXT_MUTED};
-    margin-right: 10px;
-}}
 
 QComboBox QAbstractItemView {{
-    background-color: {BG_SPACE};
-    border: 1px solid {BORDER};
+    background-color: {bg_space};
+    border: 1px solid {border};
     border-radius: {RADIUS_SM};
-    selection-background-color: {ACCENT};
-    color: {TEXT_MAIN};
+    selection-background-color: {accent};
+    color: {text_main};
     padding: 4px;
 }}
 
 /* ── Table View ────────────────────────────────────────────────────────── */
 QTableView {{
-    background-color: rgba(0, 0, 0, 0.2);
-    border: 1px solid {BORDER};
+    background-color: transparent;
+    border: 1px solid {border};
     border-radius: {RADIUS_SM};
-    gridline-color: rgba(255, 255, 255, 0.03);
-    selection-background-color: {ACCENT_GLOW};
-    selection-color: {TEXT_MAIN};
+    gridline-color: {border};
+    selection-background-color: {accent};
+    selection-color: #ffffff;
 }}
 
 QHeaderView::section {{
-    background-color: {BG_INPUT};
-    color: {TEXT_MUTED};
+    background-color: {bg_input};
+    color: {text_muted};
     border: none;
-    border-bottom: 1px solid {BORDER};
-    padding: 12px;
-    font-weight: 800;
-    text-transform: uppercase;
-    font-size: 7.5pt;
-    letter-spacing: 1px;
+    border-bottom: 1px solid {border};
+    border-right: 1px solid {border};
+    padding: 8px 12px;
+    font-weight: 700;
+    font-size: 8pt;
 }}
 
 /* ── ScrollBar ──────────────────────────────────────────────────────────── */
@@ -234,13 +305,13 @@ QScrollBar:vertical {{
 }}
 
 QScrollBar::handle:vertical {{
-    background: {BORDER};
+    background: {border};
     min-height: 20px;
     border-radius: 4px;
 }}
 
 QScrollBar::handle:vertical:hover {{
-    background: {TEXT_MUTED};
+    background: {text_muted};
 }}
 
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
@@ -249,17 +320,19 @@ QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
 
 /* ── Progress Bar ───────────────────────────────────────────────────────── */
 QProgressBar {{
-    background-color: {BG_INPUT};
-    border: 1px solid {BORDER};
+    background-color: {bg_input};
+    border: none;
     border-radius: 4px;
     height: 8px;
-    text-align: center;
-    color: transparent;
+    text-align: right;
+    color: {text_muted};
+    padding-right: 4px;
+    font-size: 8pt;
 }}
 
 QProgressBar::chunk {{
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 {ACCENT}, stop:1 {SUCCESS});
-    border-radius: 3px;
+    background-color: {success};
+    border-radius: 4px;
 }}
 
 /* ── Checkbox ──────────────────────────────────────────────────────────── */
@@ -271,17 +344,16 @@ QCheckBox::indicator {{
     width: 18px;
     height: 18px;
     border-radius: 4px;
-    border: 1px solid {BORDER};
-    background: {BG_INPUT};
+    border: 1px solid {border};
+    background: {bg_input};
 }}
 
 QCheckBox::indicator:checked {{
-    background-color: {ACCENT};
-    border-color: {ACCENT};
+    background-color: {accent};
+    border-color: {accent};
 }}
 
 QCheckBox::indicator:hover {{
-    border-color: {BORDER_FOCUS};
+    border-color: {border_focus};
 }}
 """
-

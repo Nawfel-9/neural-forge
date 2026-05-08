@@ -52,7 +52,8 @@ def load_data(filepath: str) -> pd.DataFrame:
 def get_profile(df: pd.DataFrame) -> pd.DataFrame:
     """Return statistical profile of the dataframe."""
     stats = df.describe(include='all').T
-    stats['nan_pct'] = (df.isna().sum() / len(df)) * 100
+    stats['nan_count'] = df.isna().sum()
+    stats['nan_pct'] = (stats['nan_count'] / len(df)) * 100
     stats['dtype'] = df.dtypes
     
     # Skewness for numeric columns

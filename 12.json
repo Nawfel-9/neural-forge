@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "layers": [
+    {
+      "type": "Linear",
+      "neurons": 1,
+      "activation": "None"
+    },
+    {
+      "type": "Linear",
+      "neurons": 64,
+      "activation": "None"
+    },
+    {
+      "type": "Linear",
+      "neurons": 64,
+      "activation": "None"
+    },
+    {
+      "type": "Linear",
+      "neurons": 64,
+      "activation": "None"
+    }
+  ]
+}

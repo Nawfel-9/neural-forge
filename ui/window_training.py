@@ -1,210 +1,354 @@
-"""
-window_training.py
-==================
-Window 3 — Training, Monitoring & Export.
-
-Initializes the `TrainingWorker`, displays logs, shows hardware selection,
-connects to Phase 5 features (loss curves, resource monitor, ONNX export).
-"""
-
 from __future__ import annotations
-
 import os
 import psutil
 import torch
 import pyqtgraph as pg
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import Qt, QTimer, QRectF
+from PyQt6.QtGui import QPainter, QColor, QPen, QBrush, QFont, QLinearGradient, QPainterPath, QPalette
 from PyQt6.QtWidgets import (
-    QComboBox,
-    QDoubleSpinBox,
-    QFileDialog,
-    QGroupBox,
-    QHBoxLayout,
-    QLabel,
-    QMainWindow,
-    QMessageBox,
-    QProgressBar,
-    QPushButton,
-    QSpinBox,
-    QTextEdit,
-    QVBoxLayout,
-    QWidget,
+    QComboBox, QDoubleSpinBox, QGroupBox, QHBoxLayout, QLabel, 
+    QMessageBox, QProgressBar, QPushButton, QSpinBox, QTextEdit, 
+    QVBoxLayout, QWidget, QScrollArea, QFrame, QFormLayout
 )
 
 from utils.project_state import ProjectState
 from workers.training_worker import TrainingWorker
-from backend.exporter import export_to_onnx
 
+class SystemResourcesWidget(QFrame):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedSize(320, 190)
+        self.cpu = 0
+        self.ram = 0
+        self.vram_pct = 0
+        self.ram_used = 0
+        self.ram_total = 0
+        self.cpu_freq = 0.0
+        
+        self.history = {
+            "CPU": [0]*60,
+            "GPU": [0]*60,
+            "RAM": [0]*60
+        }
+        self.selected = "CPU"
+        self.hitboxes = {}
+        
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        
+    def update_stats(self, cpu, ram_pct, ram_used_gb, ram_total_gb, vram_pct, cpu_freq):
+        self.cpu = cpu
+        self.ram = ram_pct
+        self.vram_pct = vram_pct
+        self.ram_used = ram_used_gb
+        self.ram_total = ram_total_gb
+        self.cpu_freq = cpu_freq
+        
+        self.history["CPU"].append(cpu)
+        self.history["GPU"].append(vram_pct)
+        self.history["RAM"].append(ram_pct)
+        
+        for k in self.history:
+            if len(self.history[k]) > 60:
+                self.history[k].pop(0)
+                
+        self.update()
 
-class TrainingWindow(QMainWindow):
-    def __init__(
-        self,
-        project_state: ProjectState,
-        on_back=None,
-        parent: QWidget | None = None,
-    ) -> None:
+    def mousePressEvent(self, event):
+        if hasattr(event, "position"):
+            pos = event.position()
+        else:
+            pos = event.pos()
+            
+        from PyQt6.QtCore import QPointF
+        if not isinstance(pos, QPointF):
+            pos = QPointF(pos.x(), pos.y())
+            
+        for name, rect in self.hitboxes.items():
+            if rect.contains(pos):
+                self.selected = name
+                self.update()
+                break
+        super().mousePressEvent(event)
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        
+        from PyQt6.QtGui import QPalette
+        palette = self.palette()
+        bg_space = palette.color(QPalette.ColorRole.Window)
+        bg_glass = palette.color(QPalette.ColorRole.AlternateBase)
+        text_main = palette.color(QPalette.ColorRole.WindowText)
+        text_muted = palette.color(QPalette.ColorGroup.Disabled, QPalette.ColorRole.WindowText)
+        accent = palette.color(QPalette.ColorRole.Highlight)
+        
+        # Draw background
+        rect = self.rect()
+        painter.setBrush(bg_space)
+        painter.setPen(QPen(bg_glass, 1))
+        painter.drawRoundedRect(rect.adjusted(1,1,-1,-1), 8, 8)
+        
+        # Draw Title
+        painter.setPen(text_main)
+        font = QFont("Segoe UI", 10, QFont.Weight.Bold)
+        painter.setFont(font)
+        painter.drawText(16, 24, " System Resources")
+        
+        # Left side labels
+        font = QFont("Segoe UI", 10)
+        painter.setFont(font)
+        
+        y_start = 55
+        spacing = 35
+        labels = [
+            ("CPU", self.cpu),
+            ("GPU", self.vram_pct),
+            ("RAM", self.ram)
+        ]
+        
+        self.hitboxes.clear()
+        
+        # Create a dynamic pill background using text_main with low alpha
+        pill_bg = QColor(text_main)
+        pill_bg.setAlpha(25)
+        
+        for i, (name, val) in enumerate(labels):
+            y = y_start + i * spacing
+            hitbox = QRectF(10, y - 20, 110, 28)
+            self.hitboxes[name] = hitbox
+            
+            if name == self.selected:
+                painter.setBrush(pill_bg)
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.drawRoundedRect(hitbox, 6, 6)
+                painter.setPen(text_main)
+            else:
+                painter.setPen(text_muted)
+                
+            painter.drawText(20, y, f"{name}  {int(val)} %")
+            
+        # Right Side (Large numbers)
+        current_val = self.history[self.selected][-1] if self.history[self.selected] else 0
+        
+        painter.setPen(text_main)
+        font = QFont("Segoe UI", 26, QFont.Weight.Bold)
+        painter.setFont(font)
+        painter.drawText(QRectF(130, 30, 170, 40), Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, f"{int(current_val)} %")
+        
+        painter.setPen(text_muted)
+        font = QFont("Segoe UI", 9)
+        painter.setFont(font)
+        
+        subtext = ""
+        if self.selected == "CPU":
+            subtext = f"{self.cpu_freq:.2f} GHz"
+        elif self.selected == "RAM":
+            subtext = f"{self.ram_used:.1f}/{self.ram_total:.1f} GB"
+        elif self.selected == "GPU":
+            subtext = "VRAM Usage"
+            
+        painter.drawText(QRectF(130, 70, 170, 20), Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, subtext)
+        
+        # Line Graph
+        graph_x = 140
+        graph_y = 120
+        graph_w = 160
+        graph_h = 40
+        
+        painter.setPen(text_muted)
+        painter.drawText(QRectF(graph_x, graph_y + graph_h + 5, graph_w, 15), Qt.AlignmentFlag.AlignLeft, "60 Seconds")
+        painter.drawText(QRectF(graph_x, graph_y + graph_h + 5, graph_w, 15), Qt.AlignmentFlag.AlignRight, "0")
+        
+        data = self.history[self.selected]
+        if not data:
+            return
+            
+        path = QPainterPath()
+        fill_path = QPainterPath()
+        
+        dx = graph_w / max(1, len(data) - 1)
+        
+        fill_path.moveTo(graph_x, graph_y + graph_h)
+        
+        for i, val in enumerate(data):
+            x = graph_x + i * dx
+            y = graph_y + graph_h - (val / 100.0) * graph_h
+            if i == 0:
+                path.moveTo(x, y)
+                fill_path.lineTo(x, y)
+            else:
+                path.lineTo(x, y)
+                fill_path.lineTo(x, y)
+                
+        fill_path.lineTo(graph_x + graph_w, graph_y + graph_h)
+        fill_path.closeSubpath()
+        
+        grad = QLinearGradient(graph_x, graph_y, graph_x, graph_y + graph_h)
+        
+        color_top = QColor(accent)
+        color_top.setAlpha(180)
+        color_bottom = QColor(accent)
+        color_bottom.setAlpha(20)
+        
+        grad.setColorAt(0, color_top)
+        grad.setColorAt(1, color_bottom)
+        
+        painter.setBrush(QBrush(grad))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawPath(fill_path)
+        
+        line_color = QColor(accent).lighter(120)
+        painter.setPen(QPen(line_color, 2))
+        painter.drawPath(path)
+
+class TrainingWindow(QWidget):
+    """
+    Training & Evaluation Dashboard.
+    """
+    def __init__(self, project_state: ProjectState, on_back=None, parent=None) -> None:
         super().__init__(parent)
         self.state = project_state
         self._on_back_callback = on_back
         self.worker: TrainingWorker | None = None
 
-        # Plot data
         self.plot_epochs = []
         self.train_losses = []
         self.val_losses = []
 
-        self._init_window()
         self._build_ui()
         self._setup_resource_monitor()
 
-    def _init_window(self) -> None:
-        self.setWindowTitle("Neural Network Builder — Training & Monitoring")
-        self.setMinimumSize(920, 680)
-        self.resize(1000, 750)
-
     def _build_ui(self) -> None:
-        central = QWidget()
-        self.setCentralWidget(central)
-        root = QVBoxLayout(central)
-        root.setContentsMargins(20, 20, 20, 20)
-        root.setSpacing(14)
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
 
-        # ── Header & Monitor ──────────────────────────────────────────
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        
+        container = QWidget()
+        root = QVBoxLayout(container)
+        root.setContentsMargins(32, 32, 32, 32)
+        root.setSpacing(24)
+
+        # ── Header & Monitor ──
         header_row = QHBoxLayout()
-        header = QLabel("⚙️  Training Studio")
-        header.setProperty("class", "heading")
-        header.setStyleSheet("font-size: 20px; font-weight: 700;")
-        header_row.addWidget(header)
+        title_lay = QVBoxLayout()
+        title = QLabel("Training & Evaluation Lab")
+        title.setProperty("class", "PageTitle")
+        subtitle = QLabel("Train your model and evaluate its performance in real-time.")
+        subtitle.setProperty("class", "PageSubtitle")
+        title_lay.addWidget(title)
+        title_lay.addWidget(subtitle)
+        header_row.addLayout(title_lay)
         header_row.addStretch()
 
-        self.lbl_resources = QLabel("CPU: 0% | RAM: 0% | VRAM: N/A")
-        self.lbl_resources.setStyleSheet("color: #8b949e; font-family: monospace; font-size: 13px;")
-        header_row.addWidget(self.lbl_resources)
+        self.res_widget = SystemResourcesWidget()
+        header_row.addWidget(self.res_widget)
+
         root.addLayout(header_row)
 
-        # ── Config Panel ──────────────────────────────────────────────
+        # ── Configuration Panel ──
         config_row = QHBoxLayout()
         config_row.addWidget(self._build_hyperparams_panel())
         config_row.addWidget(self._build_hardware_panel())
         root.addLayout(config_row)
 
-        # ── Visuals & Logs ────────────────────────────────────────────
+
+        # ── Visuals & Logs ──
         visuals_row = QHBoxLayout()
         
-        # 1. PyQtGraph Plot
+        # PyQtGraph Plot
         self.plot_widget = pg.PlotWidget()
-        self.plot_widget.setBackground('#0d1117')
-        self.plot_widget.setTitle("Loss Curve", color="#ffffff")
+        self.plot_widget.setMinimumHeight(350)
+        self.plot_widget.setBackground('transparent')
+        self.plot_widget.setTitle("Loss Curve", color="#0EA5E9")
         self.plot_widget.setLabel('left', 'Loss')
         self.plot_widget.setLabel('bottom', 'Epoch')
         self.plot_widget.addLegend()
-        self.train_line = self.plot_widget.plot(pen=pg.mkPen(color='#3fb950', width=2), name="Train Loss")
-        self.val_line = self.plot_widget.plot(pen=pg.mkPen(color='#58a6ff', width=2), name="Val Loss")
+        self.train_line = self.plot_widget.plot(pen=pg.mkPen(color='#10B981', width=2), name="Train Loss")
+        self.val_line = self.plot_widget.plot(pen=pg.mkPen(color='#0EA5E9', width=2), name="Val Loss")
         visuals_row.addWidget(self.plot_widget, stretch=2)
 
-        # 2. Text Logs
+        # Text Logs
         self.log_console = QTextEdit()
         self.log_console.setReadOnly(True)
-        self.log_console.setStyleSheet("font-family: monospace; background-color: #0d1117; color: #c9d1d9;")
+        self.log_console.setStyleSheet("font-family: monospace; font-size: 9pt;")
         visuals_row.addWidget(self.log_console, stretch=1)
         
         root.addLayout(visuals_row, stretch=1)
 
-        # ── Progress ──────────────────────────────────────────────────
+        # ── Metrics Panel (Hidden until eval finishes) ──
+        self.metrics_group = QGroupBox("Evaluation Metrics")
+        self.metrics_group.setVisible(False)
+        self.metrics_layout = QHBoxLayout(self.metrics_group)
+        root.addWidget(self.metrics_group)
+
+        # ── Progress ──
         self.progress_bar = QProgressBar()
         self.progress_bar.setValue(0)
         self.progress_bar.setTextVisible(True)
         root.addWidget(self.progress_bar)
 
-        # ── Bottom Buttons ────────────────────────────────────────────
+        # ── Bottom Buttons ──
         btn_bar = QHBoxLayout()
-
-        if self._on_back_callback:
-            self.btn_back = QPushButton("←  Back to Model")
-            self.btn_back.setMinimumHeight(40)
-            self.btn_back.clicked.connect(self._on_back_callback)
-            btn_bar.addWidget(self.btn_back)
-
         btn_bar.addStretch()
 
-        self.btn_export = QPushButton("📦  Export ONNX")
-        self.btn_export.setMinimumHeight(40)
-        self.btn_export.setEnabled(False)
-        self.btn_export.clicked.connect(self._export_onnx)
-        btn_bar.addWidget(self.btn_export)
-
-        self.btn_stop = QPushButton("🛑  Stop")
-        self.btn_stop.setMinimumHeight(40)
+        self.btn_stop = QPushButton("🛑 Stop")
+        self.btn_stop.setMinimumSize(150, 44)
         self.btn_stop.setEnabled(False)
         self.btn_stop.clicked.connect(self._stop_training)
         btn_bar.addWidget(self.btn_stop)
 
-        self.btn_train = QPushButton("▶  Start Training")
+        self.btn_train = QPushButton("▶ Start Training")
         self.btn_train.setProperty("class", "primary")
-        self.btn_train.setMinimumHeight(40)
-        self.btn_train.setMinimumWidth(200)
+        self.btn_train.setMinimumSize(250, 44)
         self.btn_train.clicked.connect(self._start_training)
         btn_bar.addWidget(self.btn_train)
 
         root.addLayout(btn_bar)
 
+        scroll.setWidget(container)
+        main_layout.addWidget(scroll)
+
     def _build_hyperparams_panel(self) -> QGroupBox:
         group = QGroupBox("Hyperparameters")
-        lay = QVBoxLayout(group)
-
-        row_lr = QHBoxLayout()
-        row_lr.addWidget(QLabel("Learning Rate:"))
+        lay = QFormLayout(group)
+        
         self.spin_lr = QDoubleSpinBox()
         self.spin_lr.setDecimals(4)
         self.spin_lr.setRange(0.0001, 1.0)
         self.spin_lr.setSingleStep(0.001)
         self.spin_lr.setValue(self.state.hyperparams.get("lr", 0.001))
-        row_lr.addWidget(self.spin_lr)
-        lay.addLayout(row_lr)
-
-        row_epoch = QHBoxLayout()
-        row_epoch.addWidget(QLabel("Epochs:"))
+        lay.addRow("Learning Rate:", self.spin_lr)
+        
         self.spin_epochs = QSpinBox()
         self.spin_epochs.setRange(1, 10000)
         self.spin_epochs.setValue(self.state.hyperparams.get("epochs", 50))
-        row_epoch.addWidget(self.spin_epochs)
-        lay.addLayout(row_epoch)
-
-        row_bs = QHBoxLayout()
-        row_bs.addWidget(QLabel("Batch Size:"))
+        lay.addRow("Epochs:", self.spin_epochs)
+        
         self.spin_bs = QSpinBox()
         self.spin_bs.setRange(1, 1024)
         self.spin_bs.setValue(self.state.hyperparams.get("batch_size", 32))
-        row_bs.addWidget(self.spin_bs)
-        lay.addLayout(row_bs)
-
-        lay.addStretch()
+        lay.addRow("Batch Size:", self.spin_bs)
         return group
 
     def refresh_ui(self) -> None:
-        """Refresh hyperparameter fields from the current ProjectState."""
         self.spin_lr.setValue(self.state.hyperparams.get("lr", 0.001))
         self.spin_epochs.setValue(self.state.hyperparams.get("epochs", 50))
         self.spin_bs.setValue(self.state.hyperparams.get("batch_size", 32))
-        
-        # Reset progress and logs
         self.progress_bar.setValue(0)
-        self.log_console.clear()
-        self.btn_export.setEnabled(False)
         self.btn_stop.setEnabled(False)
         self.btn_train.setEnabled(True)
 
     def _build_hardware_panel(self) -> QGroupBox:
         group = QGroupBox("Hardware Selection")
         lay = QVBoxLayout(group)
-
         self.combo_device = QComboBox()
         self.combo_device.addItem("CPU", "cpu")
-        if torch.cuda.is_available():
-            self.combo_device.addItem("CUDA (NVIDIA GPU)", "cuda")
-        if torch.backends.mps.is_available():
-            self.combo_device.addItem("MPS (Apple Silicon)", "mps")
-
+        if torch.cuda.is_available(): self.combo_device.addItem("CUDA (NVIDIA GPU)", "cuda")
+        if torch.backends.mps.is_available(): self.combo_device.addItem("MPS (Apple Silicon)", "mps")
         lay.addWidget(QLabel("Select Compute Device:"))
         lay.addWidget(self.combo_device)
         lay.addStretch()
@@ -213,60 +357,68 @@ class TrainingWindow(QMainWindow):
     def _setup_resource_monitor(self) -> None:
         self.res_timer = QTimer(self)
         self.res_timer.timeout.connect(self._update_resources)
-        self.res_timer.start(1000) # 1 sec
+        self.res_timer.start(1000) 
 
     def _update_resources(self) -> None:
         cpu = psutil.cpu_percent()
-        ram = psutil.virtual_memory().percent
+        mem = psutil.virtual_memory()
+        ram_pct = mem.percent
+        ram_used = mem.used / (1024 ** 3)
+        ram_total = mem.total / (1024 ** 3)
         
-        vram_str = "N/A"
+        cpu_freq = psutil.cpu_freq().current / 1000.0 if psutil.cpu_freq() else 0.0
+        
+        vram_pct = 0.0
         if torch.cuda.is_available():
-            # Allocated memory in MB
-            mem = torch.cuda.memory_allocated() / (1024 ** 2)
-            vram_str = f"{mem:.1f} MB"
-
-        self.lbl_resources.setText(f"CPU: {cpu}% | RAM: {ram}% | VRAM: {vram_str}")
+            try:
+                vram_alloc = torch.cuda.memory_allocated()
+                vram_total = torch.cuda.get_device_properties(0).total_memory
+                vram_pct = (vram_alloc / max(1, vram_total)) * 100.0
+            except:
+                pass
+                
+        self.res_widget.update_stats(cpu, ram_pct, ram_used, ram_total, vram_pct, cpu_freq)
 
     def _start_training(self) -> None:
-        # Sync state
         self.state.hyperparams["lr"] = self.spin_lr.value()
         self.state.hyperparams["epochs"] = self.spin_epochs.value()
         self.state.hyperparams["batch_size"] = self.spin_bs.value()
         self.state.device = self.combo_device.currentData()
 
-        # UI toggles
         self.btn_train.setEnabled(False)
-        if self._on_back_callback:
-            self.btn_back.setEnabled(False)
         self.btn_stop.setEnabled(True)
-        self.btn_export.setEnabled(False)
         self.progress_bar.setValue(0)
         self.log_console.clear()
+        
+        # Hide metrics on restart
+        self.metrics_group.setVisible(False)
+        # Clear old metrics labels
+        while self.metrics_layout.count():
+            child = self.metrics_layout.takeAt(0)
+            if child.widget():
+                child.widget().deleteLater()
 
-        # Reset plots
         self.plot_epochs.clear()
         self.train_losses.clear()
         self.val_losses.clear()
         self.train_line.setData([], [])
         self.val_line.setData([], [])
 
-        # Start background worker
         self.worker = TrainingWorker(self.state)
         self.worker.log_message.connect(self._append_log)
         self.worker.batch_progress.connect(self._update_progress)
         self.worker.epoch_finished.connect(self._on_epoch)
+        self.worker.evaluation_finished.connect(self._on_evaluation)
         self.worker.training_finished.connect(self._on_finished)
-        
         self.worker.start()
 
     def _stop_training(self) -> None:
         if self.worker and self.worker.isRunning():
             self.worker.stop()
-            self._append_log("Stop strictly requested. Waiting for current batch to finish...")
+            self._append_log("Stop requested. Waiting for current batch to finish...")
 
     def _append_log(self, text: str) -> None:
         self.log_console.append(text)
-        # Scroll to bottom
         scrollbar = self.log_console.verticalScrollBar()
         scrollbar.setValue(scrollbar.maximum())
 
@@ -278,39 +430,32 @@ class TrainingWindow(QMainWindow):
         self.plot_epochs.append(epoch)
         self.train_losses.append(t_loss)
         self.val_losses.append(v_loss)
-        
         self.train_line.setData(self.plot_epochs, self.train_losses)
         self.val_line.setData(self.plot_epochs, self.val_losses)
+
+    def _on_evaluation(self, metrics: dict) -> None:
+        for name, value in metrics.items():
+            metric_card = QWidget()
+            mlay = QVBoxLayout(metric_card)
+            
+            val_lbl = QLabel(f"{value:.4f}")
+            val_lbl.setStyleSheet("font-size: 16pt; font-weight: bold; color: #10B981;")
+            val_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            
+            name_lbl = QLabel(name.upper())
+            name_lbl.setStyleSheet("font-size: 8pt; color: #64748B; font-weight: 600;")
+            name_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            
+            mlay.addWidget(val_lbl)
+            mlay.addWidget(name_lbl)
+            self.metrics_layout.addWidget(metric_card)
+            
+        self.metrics_group.setVisible(True)
 
     def _on_finished(self, success: bool, msg: str) -> None:
         self.btn_train.setEnabled(True)
         self.btn_stop.setEnabled(False)
-        if self._on_back_callback:
-            self.btn_back.setEnabled(True)
-            
         if success:
-            self.btn_export.setEnabled(True) # Ready for export
             QMessageBox.information(self, "Training Complete", msg)
         else:
             QMessageBox.critical(self, "Training Error", f"Training Failed:\n{msg}")
-
-    def _export_onnx(self) -> None:
-        """Handler for exporting the trained model to ONNX."""
-        if not self.state.model or self.state.dummy_tensor is None:
-            QMessageBox.warning(self, "Export Failed", "Model or dummy tensor is missing.")
-            return
-            
-        path, _ = QFileDialog.getSaveFileName(
-            self, "Save ONNX Model", "", "ONNX Models (*.onnx);;All Files (*)"
-        )
-        if not path:
-            return
-            
-        try:
-            success, msg = export_to_onnx(self.state.model, self.state.dummy_tensor, path)
-            if success:
-                QMessageBox.information(self, "Export Success", msg)
-            else:
-                QMessageBox.critical(self, "Export Failed", msg)
-        except Exception as exc:
-            QMessageBox.critical(self, "Export Failed", f"Unexpected error:\n{exc}")
