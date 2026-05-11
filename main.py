@@ -12,6 +12,7 @@ from ui.window_data import DataWindow
 from ui.window_model import ModelBuilderWindow
 from ui.window_training import TrainingWindow
 from ui.window_export import ExportWindow
+from ui.window_assistant import AssistantWindow
 from ui.window_project_guide import ProjectGuideDialog
 from ui.custom_toggle import PremiumToggle
 from utils.project_state import ProjectState
@@ -295,6 +296,7 @@ class NeuralForgeApp(QMainWindow):
             ("Train & Evaluate", 3),
             ("Export", 4),
             ("Developer Mode", 5),
+            ("AI Assistant", 6),
         ]
 
         for text, index in nav_items:
@@ -336,6 +338,7 @@ class NeuralForgeApp(QMainWindow):
             on_import=self._open_dev_mode,
             on_no_code=self._start_no_code_pipeline,
         )
+        self.assistant_dash = AssistantWindow(self.state)
 
         self.stack.addWidget(self.home_dash)   # 0
         self.stack.addWidget(self.data_dash)   # 1
@@ -343,6 +346,7 @@ class NeuralForgeApp(QMainWindow):
         self.stack.addWidget(self.train_dash)  # 3
         self.stack.addWidget(self.export_dash) # 4
         self.stack.addWidget(self.dev_dash)    # 5
+        self.stack.addWidget(self.assistant_dash) # 6
 
         main_layout.addWidget(self.stack, stretch=1)
 
@@ -383,6 +387,8 @@ class NeuralForgeApp(QMainWindow):
             self.export_dash.refresh_status()
         elif index == 5:
             self.dev_dash.refresh_status()
+        elif index == 6:
+            self.assistant_dash.refresh_status()
 
         self.stack.setCurrentIndex(index)
 

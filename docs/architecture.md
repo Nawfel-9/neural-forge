@@ -1,6 +1,6 @@
 # Architecture
 
-> Neural Forge is a PyQt6 + PyTorch desktop app with a no-code neural-network pipeline and a Developer Mode project-import path.
+> Neural Forge is a PyQt6 + PyTorch desktop app with a no-code neural-network pipeline, a Developer Mode project-import path, and an NVIDIA-backed AI Assistant.
 
 ---
 
@@ -18,6 +18,7 @@ flowchart TB
     DevGuide["Developer Mode Guide"]
     DevImport["Folder Picker"]
     DevStatus["Developer Mode Status"]
+    Assistant["AI Assistant"]
 
     Home -- "No-Code Pipeline" --> Data
     Data --> Model
@@ -27,9 +28,14 @@ flowchart TB
     DevGuide --> DevImport
     DevImport --> DevStatus
     DevStatus -- "Use No-Code Pipeline" --> Data
+    Home --> Assistant
+    Data --> Assistant
+    Model --> Assistant
+    Train --> Assistant
+    Export --> Assistant
 ```
 
-Developer Mode currently validates a code project folder. It does not yet execute user project code or converge into the no-code training worker.
+Developer Mode validates a code project folder and preserves the imported project path. The AI Assistant can use the current project state as context, but it does not execute training or mutate project files.
 
 ---
 
@@ -63,6 +69,7 @@ neural-forge/
 ├── requirements.txt
 ├── assets/
 ├── backend/
+│   ├── assistant_client.py
 │   ├── data_handler.py
 │   ├── exporter.py
 │   ├── model_builder.py
@@ -76,6 +83,7 @@ neural-forge/
 │   ├── monitor_panel.py
 │   ├── plot_panel.py
 │   ├── styles.py
+│   ├── window_assistant.py
 │   ├── window_data.py
 │   ├── window_export.py
 │   ├── window_model.py
@@ -83,6 +91,9 @@ neural-forge/
 │   └── window_training.py
 ├── utils/
 └── workers/
+    ├── assistant_worker.py
+    ├── data_loader_worker.py
+    └── training_worker.py
 ```
 
 ---
@@ -110,12 +121,32 @@ The import path is stored as `ProjectState.dev_project_path`.
 
 ---
 
+## AI Assistant
+
+The assistant tab uses `ui.window_assistant.AssistantWindow` for the chat UI and `workers.assistant_worker.AssistantWorker` for background streaming. The backend client lives in `backend.assistant_client` and talks to NVIDIA's OpenAI-compatible endpoint.
+
+Configuration is read from environment variables, usually through a local `.env` file:
+
+| Variable | Purpose |
+|---|---|
+| `NVIDIA_API_KEY` | Required API key for NVIDIA hosted models |
+| `NVIDIA_BASE_URL` | API base URL, defaults to `https://integrate.api.nvidia.com/v1` |
+| `NVIDIA_ASSISTANT_MODEL` | Chat model, defaults to `nvidia/nemotron-mini-4b-instruct` |
+| `NVIDIA_ASSISTANT_TIMEOUT_SECONDS` | Request timeout, defaults to `20` |
+| `NVIDIA_ASSISTANT_MAX_TOKENS` | Response token budget, defaults to `1024` |
+| `NVIDIA_ASSISTANT_ENABLE_THINKING` | Enables provider reasoning chunks when set to `true`; defaults to `false` for faster chat |
+
+The assistant receives a compact project summary generated from `ProjectState`: dataset status, target, problem type, split configuration, blueprint layers, training settings, export readiness, and Developer Mode path. It does not receive full dataset contents.
+
+---
+
 ## Backend Boundaries
 
 Backend modules do not import PyQt6:
 
 | Module | Responsibility |
 |---|---|
+| `backend/assistant_client.py` | NVIDIA API settings, project context summary, streaming chat responses |
 | `backend/data_handler.py` | Loading, profiling, cleaning, feature engineering, preprocessing, splitting |
 | `backend/model_builder.py` | Blueprint translation and ghost-run validation |
 | `backend/training_config.py` | Loss/optimizer registries |
@@ -125,6 +156,7 @@ Long-running work is delegated to workers:
 
 | Worker | Purpose |
 |---|---|
+| `AssistantWorker` | Streams chat responses off the UI thread |
 | `DataLoaderWorker` | Runs data operations off the UI thread |
 | `TrainingWorker` | Runs PyTorch training and evaluation off the UI thread |
 
@@ -141,6 +173,7 @@ Long-running work is delegated to workers:
 | `pyqtgraph` | Live plots |
 | `psutil` | CPU/RAM monitoring |
 | `onnx` | ONNX export validation |
+| `openai`, `python-dotenv` | NVIDIA AI Assistant API client and local environment loading |
 
 ---
 

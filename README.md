@@ -17,8 +17,9 @@ Neural Forge is built with PyQt6 and PyTorch. The no-code workflow keeps the UI,
 | Evaluation | Final classification/regression metrics after training |
 | Export | Preprocessing pipeline `.pkl`, PyTorch `.pt/.pth`, and ONNX `.onnx` export |
 | Developer Mode | Project structure guide, folder import, required/optional file checklist |
+| AI Assistant | NVIDIA API-backed chat tab with lightweight project context for engineering guidance |
 
-Developer Mode currently validates project structure only. Direct code-editor and code-first training execution are intentionally left as future integration work.
+Developer Mode validates project structure and preserves the imported project path for the shared product workflow.
 
 ---
 
@@ -32,7 +33,33 @@ cd neural-forge
 pip install -r requirements.txt
 ```
 
+If you use the local Conda environment for this project:
+
+```bash
+conda activate nn_builder
+pip install -r requirements.txt
+```
+
 For GPU builds, install the PyTorch wheel that matches your hardware from the official PyTorch selector, then install the remaining requirements.
+
+The AI Assistant reads its NVIDIA API settings from `.env`. Create it from the example file and fill in your local key:
+
+```bash
+cp .env.example .env
+```
+
+Required variables:
+
+```text
+NVIDIA_API_KEY=your-nvidia-api-key
+NVIDIA_BASE_URL=https://integrate.api.nvidia.com/v1
+NVIDIA_ASSISTANT_MODEL=nvidia/nemotron-mini-4b-instruct
+NVIDIA_ASSISTANT_TIMEOUT_SECONDS=20
+NVIDIA_ASSISTANT_MAX_TOKENS=1024
+NVIDIA_ASSISTANT_ENABLE_THINKING=false
+```
+
+`.env` is intentionally ignored by Git.
 
 ---
 
@@ -58,12 +85,14 @@ The tests require the dependencies in `requirements.txt`, including PyTorch and 
 
 ```text
 neural-forge/
+├── .env.example                 # Assistant environment variable template
 ├── main.py                      # App shell, navigation, Home, Developer Mode status page
 ├── requirements.txt             # Runtime and test dependencies
 ├── assets/
 │   └── logo.png
 ├── backend/
 │   ├── data_handler.py          # Data loading, cleaning, preprocessing, splitting
+│   ├── assistant_client.py      # NVIDIA OpenAI-compatible assistant client
 │   ├── exporter.py              # ONNX export helper
 │   ├── model_builder.py         # Blueprint to nn.Sequential + ghost run
 │   └── training_config.py       # Loss and optimizer registries
@@ -86,6 +115,7 @@ neural-forge/
 │   ├── plot_panel.py
 │   ├── styles.py
 │   ├── window_data.py
+│   ├── window_assistant.py
 │   ├── window_export.py
 │   ├── window_model.py
 │   ├── window_project_guide.py
@@ -95,6 +125,7 @@ neural-forge/
 │   ├── project_state.py
 │   └── validators.py
 └── workers/
+    ├── assistant_worker.py
     ├── data_loader_worker.py
     └── training_worker.py
 ```
@@ -122,4 +153,5 @@ neural-forge/
 - **Shared project state**: `ProjectState` carries data, blueprint, model, training settings, and Developer Mode import state across screens.
 - **Registry-driven training config**: losses and optimizers live in `backend/training_config.py`.
 - **Threaded long-running work**: data operations use `DataLoaderWorker`; model training uses `TrainingWorker`.
+- **Assistant integration**: `AssistantWindow` streams NVIDIA API responses through `AssistantWorker` and injects a compact project-state summary.
 - **Export-ready outputs**: the final app can export preprocessing and model artifacts without coupling export logic to the UI.

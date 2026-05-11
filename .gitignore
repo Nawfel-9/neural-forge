@@ -10,6 +10,9 @@ build/
 .venv/
 venv/
 
+# Environment files
+.env
+
 # IDE
 .vscode/
 .idea/

@@ -8,3 +8,5 @@ psutil>=5.9
 scikit-learn>=1.4
 imbalanced-learn>=0.12
 onnx>=1.15
+openai>=1.51
+python-dotenv>=1.0
