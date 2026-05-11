@@ -296,7 +296,7 @@ class NeuralForgeApp(QMainWindow):
             ("Home", 0),
             ("Data Lab", 1),
             ("Model Builder", 2),
-            ("Train & Evaluate", 3),
+            ("Training", 3),
             ("Export", 4),
             ("AI Assistant", 6),
         ]
