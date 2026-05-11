@@ -251,10 +251,12 @@ class DevProjectWindow(QWidget):
                 + ", ".join(missing_required)
             )
             self.lbl_project_status.setStyleSheet("color: #EF4444; font-weight: 700;")
+            self.btn_training.setEnabled(False)
         else:
             self.lbl_project_status.setText("Project structure looks ready for Developer Mode.")
             self.lbl_project_status.setStyleSheet("color: #10B981; font-weight: 700;")
-
+            self.btn_training.setEnabled(False)
+            self.btn_training.setToolTip("Developer training integration is not implemented yet.")
 
 class NeuralForgeApp(QMainWindow):
     """Main application window with persistent sidebar and content stack."""
