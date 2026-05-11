@@ -8,7 +8,7 @@
 
 Developer Mode imports and validates an existing PyTorch project folder. When the required files are present, it can hand the project to the shared Training view in Developer Mode.
 
-The current integration does not open a code editor or perform static AST validation in the main flow. It uses the status page in `main.py`, then launches `backend.dev_trainer.DevTrainer` from `ui.window_training.TrainingWindow`.
+The current integration does not open a code editor or perform static AST validation in the main flow. It uses the status page in `main.py`, then launches `backend.dev_trainer.DevTrainer` from `ui.window_training.TrainingWindow`. Developer Mode also starts `backend.hardware_monitor.HardwareMonitor` for the hardware dashboard and GPU-temperature thermal guard.
 
 ---
 
@@ -41,8 +41,10 @@ The sidebar also exposes Developer Mode. If no folder has been imported yet, cli
 |---|---|
 | [`main.py`](../main.py) | Home cards, Developer Mode status page, folder-picker flow |
 | [`ui/window_training.py`](../ui/window_training.py) | Developer Mode branch inside the shared Training view |
+| [`ui/window_training_dev.py`](../ui/window_training_dev.py) | Developer Mode hardware dashboard widgets |
 | [`ui/window_project_guide.py`](../ui/window_project_guide.py) | Modal onboarding dialog that explains required project structure |
 | [`backend/dev_trainer.py`](../backend/dev_trainer.py) | QThread-based user-project training scaffold |
+| [`backend/hardware_monitor.py`](../backend/hardware_monitor.py) | QThread-based GPU/CPU/RAM monitor for Developer Mode |
 | [`utils/config_schema.py`](../utils/config_schema.py) | Serializable configuration object used by the Developer Mode trainer |
 | [`utils/project_state.py`](../utils/project_state.py) | Stores `dev_project_path` and `training_mode` |
 
@@ -99,6 +101,8 @@ Developer Mode training currently expects these runtime hooks:
 
 If `loss.py` or `metrics.py` is absent, built-in defaults are used for `classification` and `segmentation` tasks.
 
+The hardware dashboard is Developer Mode only. No-code training keeps using the existing no-code configuration panels, top-right resource text, `TrainingWorker`, and plot flow.
+
 ---
 
 ## Config Bridge Convention
@@ -110,6 +114,8 @@ learning_rate: 0.001
 batch_size: 32
 optimizer: Adam
 epochs: 50
+auto_pause_temp: 90
+resume_temp: 80
 ```
 
 User project scripts should read this file instead of hardcoding hyperparameters:

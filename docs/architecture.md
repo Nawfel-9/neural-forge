@@ -78,6 +78,7 @@ neural-forge/
 │   ├── assistant_client.py
 │   ├── data_handler.py
 │   ├── dev_trainer.py
+│   ├── hardware_monitor.py
 │   ├── exporter.py
 │   ├── model_builder.py
 │   └── training_config.py
@@ -97,6 +98,7 @@ neural-forge/
 │   ├── window_model.py
 │   ├── window_project_guide.py
 │   ├── window_project_validation.py
+│   ├── window_training_dev.py
 │   └── window_training.py
 ├── utils/
 │   ├── blueprint_io.py
@@ -147,7 +149,9 @@ Related Developer Mode files:
 |---|---|
 | `ui/window_project_validation.py` | Static AST validation screen scaffold; not currently added to `main.py`'s stacked-widget flow |
 | `backend/dev_trainer.py` | QThread-based user-project trainer launched from the Training view in Developer Mode |
-| `utils/config_schema.py` | Small serializable config object used by the Developer Mode trainer |
+| `backend/hardware_monitor.py` | QThread-based GPU/CPU/RAM stats monitor used by the Developer Mode dashboard and thermal guard |
+| `ui/window_training_dev.py` | Developer Mode hardware dashboard widgets used by the shared Training view |
+| `utils/config_schema.py` | YAML-backed serializable config object used by the Developer Mode trainer |
 
 ---
 
@@ -179,6 +183,7 @@ Production no-code backend modules do not import PyQt6. The exception is `backen
 | `backend/assistant_client.py` | NVIDIA API settings, project context summary, streaming chat responses |
 | `backend/data_handler.py` | Loading, profiling, cleaning, feature engineering, preprocessing, splitting |
 | `backend/dev_trainer.py` | Developer Mode user-project training worker scaffold |
+| `backend/hardware_monitor.py` | Developer Mode GPU/CPU/RAM sampling thread |
 | `backend/model_builder.py` | Blueprint translation and ghost-run validation |
 | `backend/training_config.py` | Loss/optimizer registries |
 | `backend/exporter.py` | ONNX export |

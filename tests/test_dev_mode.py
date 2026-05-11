@@ -68,4 +68,5 @@ def test_training_window_switches_between_nocode_and_dev_layouts(tmp_path, qapp)
         assert window.btn_reset.isHidden()
         assert window.btn_train.text() == "▶  Start Dev Training"
     finally:
+        window.close()
         window.monitor_panel.stop()

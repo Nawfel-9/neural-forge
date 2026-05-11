@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-import math
 import torch
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QBrush, QColor, QFont, QPainter, QPen
 from PyQt6.QtWidgets import (
     QComboBox,
     QDoubleSpinBox,
@@ -25,329 +23,13 @@ from PyQt6.QtWidgets import (
 from backend.training_config import get_all_optimizers, get_losses_for
 from backend.model_builder import build_and_validate
 from backend.dev_trainer import DevTrainer
+from backend.hardware_monitor import HardwareMonitor, HardwareStats
 from ui.monitor_panel import MonitorPanel
 from ui.plot_panel import PlotPanel
+from ui.window_training_dev import HardwareDashboard
 from utils.config_schema import DevProjectConfig
 from utils.project_state import ProjectState
 from workers.training_worker import TrainingWorker
-
-
-class Speedometer(QWidget):
-    """Arc-style gauge used by the Developer Mode training dashboard."""
-
-    def __init__(
-        self,
-        title: str,
-        unit: str,
-        max_value: float,
-        warn: float = 70.0,
-        danger: float = 90.0,
-        parent=None,
-    ) -> None:
-        super().__init__(parent)
-        self.title = title
-        self.unit = unit
-        self.max_value = max_value
-        self.warn = warn
-        self.danger = danger
-        self._value = 0.0
-        self.setMinimumSize(130, 130)
-
-    def set_value(self, value: float) -> None:
-        self._value = max(0.0, min(float(value), self.max_value))
-        self.update()
-
-    def paintEvent(self, _event) -> None:
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-
-        width, height = self.width(), self.height()
-        size = min(width, height) - 10
-        center_x = width // 2
-        center_y = height // 2 + 8
-        radius = size // 2
-
-        painter.setPen(
-            QPen(QColor("#1E293B"), 10, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap)
-        )
-        painter.drawArc(center_x - radius, center_y - radius, size, size, 225 * 16, -270 * 16)
-
-        percent = self._value / max(self.max_value, 1.0)
-        if self._value >= self.danger:
-            color = QColor("#EF4444")
-        elif self._value >= self.warn:
-            color = QColor("#F59E0B")
-        else:
-            color = QColor("#00A3FF")
-
-        painter.setPen(QPen(color, 10, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
-        painter.drawArc(
-            center_x - radius,
-            center_y - radius,
-            size,
-            size,
-            225 * 16,
-            int(-270 * 16 * percent),
-        )
-
-        angle = math.radians(225 - 270 * percent)
-        needle_x = center_x + (radius - 18) * math.cos(angle)
-        needle_y = center_y - (radius - 18) * math.sin(angle)
-        painter.setPen(QPen(QColor("#F1F5F9"), 2))
-        painter.drawLine(int(center_x), int(center_y), int(needle_x), int(needle_y))
-
-        painter.setBrush(QBrush(QColor("#F1F5F9")))
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.drawEllipse(center_x - 4, center_y - 4, 8, 8)
-
-        painter.setFont(QFont("Courier New", 11, QFont.Weight.Bold))
-        painter.setPen(QPen(color))
-        painter.drawText(
-            0,
-            center_y + 6,
-            width,
-            24,
-            Qt.AlignmentFlag.AlignHCenter,
-            f"{self._value:.0f}{self.unit}",
-        )
-
-        painter.setFont(QFont("Segoe UI", 7, QFont.Weight.Bold))
-        painter.setPen(QPen(QColor("#64748B")))
-        painter.drawText(
-            0,
-            center_y + 26,
-            width,
-            18,
-            Qt.AlignmentFlag.AlignHCenter,
-            self.title.upper(),
-        )
-        painter.end()
-
-
-class Thermometer(QWidget):
-    """Vertical temperature gauge for the Developer Mode dashboard."""
-
-    def __init__(
-        self,
-        title: str,
-        max_value: float = 110.0,
-        warn: float = 75.0,
-        danger: float = 90.0,
-        parent=None,
-    ) -> None:
-        super().__init__(parent)
-        self.title = title
-        self.max_value = max_value
-        self.warn = warn
-        self.danger = danger
-        self._value = 0.0
-        self.setMinimumSize(54, 130)
-        self.setMaximumWidth(70)
-
-    def set_value(self, value: float) -> None:
-        self._value = max(0.0, min(float(value), self.max_value))
-        self.update()
-
-    def paintEvent(self, _event) -> None:
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-
-        width, height = self.width(), self.height()
-        bar_width = 14
-        bar_x = (width - bar_width) // 2
-        bulb_radius = 10
-        top_y = 18
-        bottom_y = height - bulb_radius * 2 - 10
-        bar_height = max(1, bottom_y - top_y)
-
-        painter.setBrush(QBrush(QColor("#1E293B")))
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.drawRoundedRect(bar_x, top_y, bar_width, bar_height, 4, 4)
-
-        percent = self._value / max(self.max_value, 1.0)
-        fill_height = int(bar_height * percent)
-        if self._value >= self.danger:
-            color = QColor("#EF4444")
-        elif self._value >= self.warn:
-            color = QColor("#F59E0B")
-        else:
-            color = QColor("#10B981")
-
-        painter.setBrush(QBrush(color))
-        painter.drawRoundedRect(
-            bar_x,
-            top_y + bar_height - fill_height,
-            bar_width,
-            fill_height,
-            4,
-            4,
-        )
-        painter.drawEllipse(
-            bar_x - (bulb_radius - bar_width // 2),
-            bottom_y,
-            bulb_radius * 2,
-            bulb_radius * 2,
-        )
-
-        painter.setFont(QFont("Courier New", 8, QFont.Weight.Bold))
-        painter.setPen(QPen(color))
-        painter.drawText(
-            0,
-            top_y - 16,
-            width,
-            16,
-            Qt.AlignmentFlag.AlignHCenter,
-            f"{self._value:.0f} C",
-        )
-
-        painter.setFont(QFont("Segoe UI", 6, QFont.Weight.Bold))
-        painter.setPen(QPen(QColor("#64748B")))
-        painter.drawText(
-            0,
-            height - 14,
-            width,
-            14,
-            Qt.AlignmentFlag.AlignHCenter,
-            self.title.upper(),
-        )
-        painter.end()
-
-
-class UsageBar(QWidget):
-    """Horizontal RAM/VRAM usage bar used in Developer Mode."""
-
-    def __init__(self, title: str, unit: str = "MB", parent=None) -> None:
-        super().__init__(parent)
-        self.title = title
-        self.unit = unit
-        self.setFixedHeight(46)
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(3)
-
-        self._label = QLabel(f"{title}: - / -")
-        self._label.setStyleSheet("color: #94A3B8; font-size: 8pt; font-weight: 700;")
-        layout.addWidget(self._label)
-
-        self._bar = QProgressBar()
-        self._bar.setRange(0, 1000)
-        self._bar.setValue(0)
-        self._bar.setTextVisible(False)
-        self._bar.setFixedHeight(8)
-        self._bar.setStyleSheet(self._bar_style("#00A3FF"))
-        layout.addWidget(self._bar)
-
-    def _bar_style(self, color: str) -> str:
-        return f"""
-            QProgressBar {{
-                background: #1E293B;
-                border: none;
-                border-radius: 3px;
-            }}
-            QProgressBar::chunk {{
-                background: {color};
-                border-radius: 3px;
-            }}
-        """
-
-    def set_value(self, used: float, total: float) -> None:
-        total = max(float(total), 1.0)
-        used = max(0.0, float(used))
-        percent = min(used / total, 1.0)
-        if percent > 0.9:
-            color = "#EF4444"
-        elif percent > 0.75:
-            color = "#F59E0B"
-        else:
-            color = "#00A3FF"
-
-        self._bar.setValue(int(percent * 1000))
-        self._bar.setStyleSheet(self._bar_style(color))
-        self._label.setText(
-            f"{self.title}: {used:.0f} / {total:.0f} {self.unit} ({percent * 100:.0f}%)"
-        )
-
-
-class DevHardwareDashboard(QWidget):
-    """Instrument row shown above plots when Training runs in Developer Mode."""
-
-    def __init__(self, parent=None) -> None:
-        super().__init__(parent)
-        import psutil
-
-        self._psutil = psutil
-
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(0, 4, 0, 4)
-        layout.setSpacing(16)
-
-        self.gpu_usage = Speedometer("GPU Usage", "%", 100, warn=75, danger=90)
-        self.gpu_temp = Thermometer("GPU Temp", max_value=110, warn=75, danger=90)
-        self.cpu_usage = Speedometer("CPU Usage", "%", 100, warn=75, danger=90)
-        self.cpu_temp = Thermometer("CPU Temp", max_value=105, warn=75, danger=90)
-
-        bar_column = QWidget()
-        bar_layout = QVBoxLayout(bar_column)
-        bar_layout.setContentsMargins(0, 0, 0, 0)
-        bar_layout.setSpacing(8)
-        self.ram_bar = UsageBar("RAM", unit="MB")
-        self.vram_bar = UsageBar("VRAM", unit="MB")
-        bar_layout.addWidget(self.ram_bar)
-        bar_layout.addWidget(self.vram_bar)
-        bar_layout.addStretch()
-
-        layout.addWidget(self.gpu_usage)
-        layout.addWidget(self.gpu_temp)
-        layout.addWidget(self.cpu_usage)
-        layout.addWidget(self.cpu_temp)
-        layout.addWidget(bar_column, stretch=1)
-
-    def update_stats(self, payload) -> None:
-        self.gpu_usage.set_value(self._gpu_utilization())
-        self.gpu_temp.set_value(getattr(payload, "gpu_temp", 0.0))
-        self.cpu_usage.set_value(self._psutil.cpu_percent(interval=None))
-        self.cpu_temp.set_value(self._cpu_temperature())
-
-        memory = self._psutil.virtual_memory()
-        self.ram_bar.set_value(memory.used / 1024**2, memory.total / 1024**2)
-        used_vram, total_vram = self._vram_usage()
-        self.vram_bar.set_value(used_vram, total_vram)
-
-    def _gpu_utilization(self) -> float:
-        try:
-            import pynvml
-
-            pynvml.nvmlInit()
-            handle = pynvml.nvmlDeviceGetHandleByIndex(0)
-            return float(pynvml.nvmlDeviceGetUtilizationRates(handle).gpu)
-        except Exception:
-            return 0.0
-
-    def _cpu_temperature(self) -> float:
-        sensors_temperatures = getattr(self._psutil, "sensors_temperatures", None)
-        if sensors_temperatures is None:
-            return 0.0
-        try:
-            temperatures = sensors_temperatures()
-            for key in ("coretemp", "cpu_thermal", "k10temp", "acpitz"):
-                if key in temperatures and temperatures[key]:
-                    return float(temperatures[key][0].current)
-        except Exception:
-            return 0.0
-        return 0.0
-
-    def _vram_usage(self) -> tuple[float, float]:
-        if not torch.cuda.is_available():
-            return 0.0, 1.0
-        try:
-            free_bytes, total_bytes = torch.cuda.mem_get_info()
-            used_bytes = total_bytes - free_bytes
-            return used_bytes / 1024**2, total_bytes / 1024**2
-        except Exception:
-            used_mb = torch.cuda.memory_allocated() / 1024**2
-            total_mb = torch.cuda.get_device_properties(0).total_memory / 1024**2
-            return used_mb, total_mb
 
 
 class TrainingWindow(QWidget):
@@ -359,6 +41,7 @@ class TrainingWindow(QWidget):
         self._on_back_callback = on_back
         self.worker: TrainingWorker | None = None
         self.dev_worker: DevTrainer | None = None
+        self.hardware_monitor: HardwareMonitor | None = None
         self._total_dev_epochs = 1
         self._last_dev_train_loss = 0.0
 
@@ -403,26 +86,8 @@ class TrainingWindow(QWidget):
         config_row.addWidget(self._build_hardware_panel())
         root.addWidget(self.nocode_config_widget)
 
-        self.dev_config_group = QGroupBox("Developer Mode Project")
-        dev_layout = QVBoxLayout(self.dev_config_group)
-        self.lbl_dev_project = QLabel("No Developer Mode project imported.")
-        self.lbl_dev_project.setWordWrap(True)
-        self.lbl_dev_project.setStyleSheet("font-weight: 700;")
-        dev_layout.addWidget(self.lbl_dev_project)
-        self.lbl_dev_contract = QLabel(
-            "Start Training loads config.yaml and expects model.py to define "
-            "get_model(config), dataset.py to define get_dataloader(config, split), "
-            "and optional loss.py / metrics.py hooks."
-        )
-        self.lbl_dev_contract.setWordWrap(True)
-        self.lbl_dev_contract.setStyleSheet("color: #64748B;")
-        dev_layout.addWidget(self.lbl_dev_contract)
-        self.dev_config_group.setVisible(False)
-        root.addWidget(self.dev_config_group)
-
-        self.dev_dashboard = DevHardwareDashboard()
+        self.dev_dashboard = HardwareDashboard()
         self.dev_dashboard.setVisible(False)
-        self.monitor_panel.stats_updated.connect(self.dev_dashboard.update_stats)
         root.addWidget(self.dev_dashboard)
 
         visuals_row = QHBoxLayout()
@@ -603,7 +268,6 @@ class TrainingWindow(QWidget):
     def refresh_ui(self) -> None:
         is_dev = getattr(self.state, "training_mode", "nocode") == "dev"
         self.nocode_config_widget.setVisible(not is_dev)
-        self.dev_config_group.setVisible(False)
         self.dev_dashboard.setVisible(is_dev)
         self.btn_reset.setVisible(not is_dev)
 
@@ -612,8 +276,8 @@ class TrainingWindow(QWidget):
             self.btn_back.setVisible(not is_dev)
 
         if is_dev:
+            self._ensure_hardware_monitor()
             project_path = getattr(self.state, "dev_project_path", "")
-            self.lbl_dev_project.setText(project_path or "No Developer Mode project imported.")
             self.btn_train.setText("▶  Start Dev Training")
             self.btn_train.setEnabled(bool(project_path))
             self.btn_stop.setEnabled(False)
@@ -624,6 +288,7 @@ class TrainingWindow(QWidget):
             self.progress_bar.setValue(0)
             return
 
+        self._stop_hardware_monitor()
         self.btn_train.setText("Start Training")
         self.spin_lr.setValue(self.state.hyperparams.get("lr", 0.001))
         self.spin_epochs.setValue(self.state.hyperparams.get("epochs", 50))
@@ -867,17 +532,28 @@ class TrainingWindow(QWidget):
         self.dev_worker.resumed_by_temp.connect(
             lambda temp: self._append_log(f"Thermal resume: GPU {temp:.0f} C")
         )
-        try:
-            self.monitor_panel.stats_updated.disconnect(self._on_monitor_stats)
-        except TypeError:
-            pass
-        self.monitor_panel.stats_updated.connect(self._on_monitor_stats)
+        self._ensure_hardware_monitor()
         self.dev_worker.finished.connect(self._cleanup_dev_worker)
         self.dev_worker.start()
 
-    def _on_monitor_stats(self, stats) -> None:
+    def _ensure_hardware_monitor(self) -> None:
+        if self.hardware_monitor and self.hardware_monitor.isRunning():
+            return
+        self.hardware_monitor = HardwareMonitor(interval=1.0, parent=self)
+        self.hardware_monitor.stats_updated.connect(self.dev_dashboard.on_stats)
+        self.hardware_monitor.stats_updated.connect(self._on_hardware_stats)
+        self.hardware_monitor.start()
+
+    def _stop_hardware_monitor(self) -> None:
+        if not self.hardware_monitor:
+            return
+        if self.hardware_monitor.isRunning():
+            self.hardware_monitor.stop()
+        self.hardware_monitor = None
+
+    def _on_hardware_stats(self, stats: HardwareStats) -> None:
         if self.dev_worker and self.dev_worker.isRunning():
-            self.dev_worker.update_gpu_temp(getattr(stats, "gpu_temp", 0.0))
+            self.dev_worker.update_gpu_temp(stats.gpu_temp)
 
     def _on_dev_epoch(self, epoch: int, loss: float, metrics: dict) -> None:
         self._last_dev_train_loss = float(loss)
@@ -917,8 +593,9 @@ class TrainingWindow(QWidget):
         QMessageBox.critical(self, "Developer Training Error", msg[:1200])
 
     def _cleanup_dev_worker(self) -> None:
-        try:
-            self.monitor_panel.stats_updated.disconnect(self._on_monitor_stats)
-        except TypeError:
-            pass
         self.dev_worker = None
+
+    def closeEvent(self, event) -> None:
+        self._stop_hardware_monitor()
+        self.monitor_panel.stop()
+        super().closeEvent(event)

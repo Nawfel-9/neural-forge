@@ -19,7 +19,7 @@ Neural Forge is built with PyQt6 and PyTorch. The no-code workflow keeps the UI,
 | Developer Mode | Project structure guide, folder import, required/optional file checklist, and Developer Mode handoff to the Training view |
 | AI Assistant | NVIDIA API-backed chat tab with lightweight project context for engineering guidance |
 
-Developer Mode validates project structure and preserves the imported project path. When required files are present, **Continue to Training** opens the Training view in Developer Mode and launches the imported project through the Developer Mode training scaffold.
+Developer Mode validates project structure and preserves the imported project path. When required files are present, **Continue to Training** opens the Training view in Developer Mode, shows the dedicated hardware dashboard, and launches the imported project through the Developer Mode training scaffold.
 
 ---
 
@@ -93,6 +93,7 @@ neural-forge/
 ├── backend/
 │   ├── data_handler.py          # Data loading, cleaning, preprocessing, splitting
 │   ├── dev_trainer.py           # Developer Mode training worker scaffold
+│   ├── hardware_monitor.py      # Developer Mode GPU/CPU/RAM monitor thread
 │   ├── assistant_client.py      # NVIDIA OpenAI-compatible assistant client
 │   ├── exporter.py              # ONNX export helper
 │   ├── model_builder.py         # Blueprint to nn.Sequential + ghost run
@@ -122,6 +123,7 @@ neural-forge/
 │   ├── window_model.py
 │   ├── window_project_guide.py
 │   ├── window_project_validation.py  # Static validation screen scaffold
+│   ├── window_training_dev.py   # Developer Mode hardware dashboard widgets
 │   └── window_training.py
 ├── utils/
 │   ├── blueprint_io.py
@@ -157,6 +159,6 @@ neural-forge/
 - **Decoupled no-code backend**: the no-code backend modules do not import Qt; `backend/dev_trainer.py` is a separate Developer Mode `QThread` worker.
 - **Shared project state**: `ProjectState` carries data, blueprint, model, training settings, `training_mode`, and Developer Mode import state across screens.
 - **Registry-driven training config**: losses and optimizers live in `backend/training_config.py`.
-- **Threaded long-running work**: data operations use `DataLoaderWorker`; model training uses `TrainingWorker`.
+- **Threaded long-running work**: data operations use `DataLoaderWorker`; no-code model training uses `TrainingWorker`; Developer Mode training uses `DevTrainer` plus `HardwareMonitor`.
 - **Assistant integration**: `AssistantWindow` streams NVIDIA API responses through `AssistantWorker` and injects a compact project-state summary.
 - **Export-ready outputs**: the final app can export preprocessing and model artifacts without coupling export logic to the UI.
