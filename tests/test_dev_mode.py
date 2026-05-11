@@ -8,6 +8,7 @@ qt_widgets = pytest.importorskip("PyQt6.QtWidgets")
 QApplication = qt_widgets.QApplication
 
 from main import DevProjectWindow
+from ui.window_training import TrainingWindow
 from utils.project_state import ProjectState
 
 
@@ -44,3 +45,27 @@ def test_continue_to_training_disabled_when_required_file_missing(tmp_path, qapp
     window.refresh_status()
 
     assert not window.btn_training.isEnabled()
+
+
+def test_training_window_switches_between_nocode_and_dev_layouts(tmp_path, qapp):
+    state = ProjectState(dev_project_path=str(tmp_path))
+    window = TrainingWindow(state)
+
+    try:
+        state.training_mode = "nocode"
+        window.refresh_ui()
+
+        assert not window.nocode_config_widget.isHidden()
+        assert window.dev_dashboard.isHidden()
+        assert not window.btn_reset.isHidden()
+        assert window.btn_train.text() == "Start Training"
+
+        state.training_mode = "dev"
+        window.refresh_ui()
+
+        assert window.nocode_config_widget.isHidden()
+        assert not window.dev_dashboard.isHidden()
+        assert window.btn_reset.isHidden()
+        assert window.btn_train.text() == "▶  Start Dev Training"
+    finally:
+        window.monitor_panel.stop()
