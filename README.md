@@ -1,6 +1,6 @@
 # Neural Forge
 
-> A dual-path desktop app for building, training, monitoring, and exporting neural networks. The No-Code path is for visual model building; Developer Mode validates an imported PyTorch project structure for future code-first training integration.
+> A dual-path desktop app for building, training, monitoring, and exporting neural networks. The No-Code path is for visual model building; Developer Mode validates an imported PyTorch project structure and can hand it to the Training view for code-first training.
 
 Neural Forge is built with PyQt6 and PyTorch. The no-code workflow keeps the UI, project state, and backend ML logic decoupled: the UI produces a layer blueprint and training configuration, and the backend consumes those objects without depending on Qt.
 
@@ -16,10 +16,10 @@ Neural Forge is built with PyQt6 and PyTorch. The no-code workflow keeps the UI,
 | Training | Background `QThread` training, percentage split or K-Fold CV, CPU/CUDA/MPS selector, live loss and classification metric plots |
 | Evaluation | Final classification/regression metrics after training |
 | Export | Preprocessing pipeline `.pkl`, PyTorch `.pt/.pth`, and ONNX `.onnx` export |
-| Developer Mode | Project structure guide, folder import, required/optional file checklist; experimental static-validation/training scaffolding is present but not wired into the main app |
+| Developer Mode | Project structure guide, folder import, required/optional file checklist, and Developer Mode handoff to the Training view |
 | AI Assistant | NVIDIA API-backed chat tab with lightweight project context for engineering guidance |
 
-Developer Mode validates project structure and preserves the imported project path for the shared product workflow.
+Developer Mode validates project structure and preserves the imported project path. When required files are present, **Continue to Training** opens the Training view in Developer Mode and launches the imported project through the Developer Mode training scaffold.
 
 ---
 
@@ -92,7 +92,7 @@ neural-forge/
 │   └── logo.png
 ├── backend/
 │   ├── data_handler.py          # Data loading, cleaning, preprocessing, splitting
-│   ├── dev_trainer.py           # Experimental Developer Mode training worker scaffold
+│   ├── dev_trainer.py           # Developer Mode training worker scaffold
 │   ├── assistant_client.py      # NVIDIA OpenAI-compatible assistant client
 │   ├── exporter.py              # ONNX export helper
 │   ├── model_builder.py         # Blueprint to nn.Sequential + ghost run
@@ -121,11 +121,11 @@ neural-forge/
 │   ├── window_export.py
 │   ├── window_model.py
 │   ├── window_project_guide.py
-│   ├── window_project_validation.py  # Experimental static validation screen
+│   ├── window_project_validation.py  # Static validation screen scaffold
 │   └── window_training.py
 ├── utils/
 │   ├── blueprint_io.py
-│   ├── config_schema.py         # Experimental Developer Mode config schema
+│   ├── config_schema.py         # Developer Mode config schema
 │   ├── project_state.py
 │   └── validators.py
 └── workers/
@@ -154,8 +154,8 @@ neural-forge/
 
 ## Architecture Highlights
 
-- **Decoupled no-code backend**: the production no-code backend modules do not import Qt; `backend/dev_trainer.py` is experimental Developer Mode scaffolding and intentionally separate.
-- **Shared project state**: `ProjectState` carries data, blueprint, model, training settings, and Developer Mode import state across screens.
+- **Decoupled no-code backend**: the no-code backend modules do not import Qt; `backend/dev_trainer.py` is a separate Developer Mode `QThread` worker.
+- **Shared project state**: `ProjectState` carries data, blueprint, model, training settings, `training_mode`, and Developer Mode import state across screens.
 - **Registry-driven training config**: losses and optimizers live in `backend/training_config.py`.
 - **Threaded long-running work**: data operations use `DataLoaderWorker`; model training uses `TrainingWorker`.
 - **Assistant integration**: `AssistantWindow` streams NVIDIA API responses through `AssistantWorker` and injects a compact project-state summary.

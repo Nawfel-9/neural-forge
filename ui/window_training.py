@@ -22,8 +22,10 @@ from PyQt6.QtWidgets import (
 
 from backend.training_config import get_all_optimizers, get_losses_for
 from backend.model_builder import build_and_validate
+from backend.dev_trainer import DevTrainer
 from ui.monitor_panel import MonitorPanel
 from ui.plot_panel import PlotPanel
+from utils.config_schema import DevProjectConfig
 from utils.project_state import ProjectState
 from workers.training_worker import TrainingWorker
 
@@ -36,6 +38,9 @@ class TrainingWindow(QWidget):
         self.state = project_state
         self._on_back_callback = on_back
         self.worker: TrainingWorker | None = None
+        self.dev_worker: DevTrainer | None = None
+        self._total_dev_epochs = 1
+        self._last_dev_train_loss = 0.0
 
         self._build_ui()
         self.monitor_panel.start()
@@ -69,12 +74,31 @@ class TrainingWindow(QWidget):
         header_row.addWidget(self.monitor_panel)
         root.addLayout(header_row)
 
-        config_row = QHBoxLayout()
+        self.nocode_config_widget = QWidget()
+        config_row = QHBoxLayout(self.nocode_config_widget)
+        config_row.setContentsMargins(0, 0, 0, 0)
         config_row.addWidget(self._build_hyperparams_panel())
         config_row.addWidget(self._build_training_config_panel())
         config_row.addWidget(self._build_splitting_panel())
         config_row.addWidget(self._build_hardware_panel())
-        root.addLayout(config_row)
+        root.addWidget(self.nocode_config_widget)
+
+        self.dev_config_group = QGroupBox("Developer Mode Project")
+        dev_layout = QVBoxLayout(self.dev_config_group)
+        self.lbl_dev_project = QLabel("No Developer Mode project imported.")
+        self.lbl_dev_project.setWordWrap(True)
+        self.lbl_dev_project.setStyleSheet("font-weight: 700;")
+        dev_layout.addWidget(self.lbl_dev_project)
+        self.lbl_dev_contract = QLabel(
+            "Start Training loads config.yaml and expects model.py to define "
+            "get_model(config), dataset.py to define get_dataloader(config, split), "
+            "and optional loss.py / metrics.py hooks."
+        )
+        self.lbl_dev_contract.setWordWrap(True)
+        self.lbl_dev_contract.setStyleSheet("color: #64748B;")
+        dev_layout.addWidget(self.lbl_dev_contract)
+        self.dev_config_group.setVisible(False)
+        root.addWidget(self.dev_config_group)
 
         visuals_row = QHBoxLayout()
         self.plot_panel = PlotPanel(is_classification=self.state.problem_type == "classification")
@@ -252,6 +276,28 @@ class TrainingWindow(QWidget):
             widget.style().polish(widget)
 
     def refresh_ui(self) -> None:
+        is_dev = getattr(self.state, "training_mode", "nocode") == "dev"
+        self.nocode_config_widget.setVisible(not is_dev)
+        self.dev_config_group.setVisible(is_dev)
+        self.btn_reset.setVisible(not is_dev)
+
+        if hasattr(self, "btn_back"):
+            self.btn_back.setText("Back to Developer Mode" if is_dev else "Back to Model")
+
+        if is_dev:
+            project_path = getattr(self.state, "dev_project_path", "")
+            self.lbl_dev_project.setText(project_path or "No Developer Mode project imported.")
+            self.btn_train.setText("Start Developer Training")
+            self.btn_train.setEnabled(bool(project_path))
+            self.btn_stop.setEnabled(False)
+            self.plot_panel.set_is_classification(True)
+            self.plot_panel.clear()
+            self._refresh_model_summary()
+            self._clear_metrics()
+            self.progress_bar.setValue(0)
+            return
+
+        self.btn_train.setText("Start Training")
         self.spin_lr.setValue(self.state.hyperparams.get("lr", 0.001))
         self.spin_epochs.setValue(self.state.hyperparams.get("epochs", 50))
         self.spin_bs.setValue(self.state.hyperparams.get("batch_size", 32))
@@ -291,6 +337,30 @@ class TrainingWindow(QWidget):
             self.btn_back.setEnabled(True)
 
     def _refresh_model_summary(self) -> None:
+        if getattr(self.state, "training_mode", "nocode") == "dev":
+            if self.state.dev_project_path:
+                cfg = DevProjectConfig.load(self.state.dev_project_path)
+                self.model_summary.setText(
+                    "Developer Mode Project\n\n"
+                    f"Path: {self.state.dev_project_path}\n"
+                    f"Task: {cfg.task}\n"
+                    f"Epochs: {cfg.epochs}\n"
+                    f"Batch size: {cfg.batch_size}\n"
+                    f"Learning rate: {cfg.learning_rate}\n"
+                    f"Optimizer: {cfg.optimizer}\n"
+                    f"Device: {cfg.device}\n"
+                    f"Loss: {cfg.effective_loss()}\n"
+                    f"Metrics: {', '.join(cfg.effective_metrics())}\n\n"
+                    "Required runtime hooks:\n"
+                    "- model.py: get_model(config)\n"
+                    "- dataset.py: get_dataloader(config, split)\n"
+                    "- loss.py: get_loss(config) optional\n"
+                    "- metrics.py: get_metrics(config) optional"
+                )
+            else:
+                self.model_summary.setText("No Developer Mode project imported.")
+            return
+
         if self.state.model:
             total_params = sum(p.numel() for p in self.state.model.parameters() if p.requires_grad)
             summary_text = f"Total Trainable Parameters: {total_params:,}\n\nArchitecture:\n{self.state.model}"
@@ -328,6 +398,10 @@ class TrainingWindow(QWidget):
         self.log_console.append("=" * 50 + "\n")
 
     def _start_training(self) -> None:
+        if getattr(self.state, "training_mode", "nocode") == "dev":
+            self._start_dev_training()
+            return
+
         self.state.hyperparams["lr"] = self.spin_lr.value()
         self.state.hyperparams["epochs"] = self.spin_epochs.value()
         self.state.hyperparams["batch_size"] = self.spin_bs.value()
@@ -371,6 +445,9 @@ class TrainingWindow(QWidget):
         if self.worker and self.worker.isRunning():
             self.worker.stop()
             self._append_log("Stop requested. Waiting for current batch to finish...")
+        if self.dev_worker and self.dev_worker.isRunning():
+            self.dev_worker.stop()
+            self._append_log("Developer training stop requested...")
 
     def _append_log(self, text: str) -> None:
         self.log_console.append(text)
@@ -421,3 +498,100 @@ class TrainingWindow(QWidget):
             QMessageBox.information(self, "Training Complete", msg)
         else:
             QMessageBox.critical(self, "Training Error", f"Training Failed:\n{msg}")
+
+    def _start_dev_training(self) -> None:
+        project_path = getattr(self.state, "dev_project_path", "")
+        if not project_path:
+            QMessageBox.warning(self, "No Project Imported", "Import a Developer Mode project first.")
+            return
+
+        cfg = DevProjectConfig.load(project_path)
+        cfg.save(project_path)
+        self._total_dev_epochs = max(1, int(cfg.epochs))
+        self._last_dev_train_loss = 0.0
+
+        self.log_console.clear()
+        self.plot_panel.clear()
+        self._clear_metrics()
+        self.progress_bar.setValue(0)
+        self.btn_train.setEnabled(False)
+        self.btn_stop.setEnabled(True)
+        if hasattr(self, "btn_back"):
+            self.btn_back.setEnabled(False)
+
+        self._append_log(f"Developer project: {project_path}")
+        self._append_log(
+            f"Task: {cfg.task} | Loss: {cfg.effective_loss()} | "
+            f"Metrics: {', '.join(cfg.effective_metrics())}"
+        )
+
+        self.dev_worker = DevTrainer(project_path, cfg, parent=self)
+        self.dev_worker.training_started.connect(
+            lambda total: self._append_log(f"Training started: {total} epoch(s)")
+        )
+        self.dev_worker.epoch_completed.connect(self._on_dev_epoch)
+        self.dev_worker.val_completed.connect(self._on_dev_val)
+        self.dev_worker.training_done.connect(self._on_dev_done)
+        self.dev_worker.training_error.connect(self._on_dev_error)
+        self.dev_worker.status_changed.connect(self._append_log)
+        self.dev_worker.paused_by_temp.connect(
+            lambda temp: self._append_log(f"Thermal pause: GPU {temp:.0f} C")
+        )
+        self.dev_worker.resumed_by_temp.connect(
+            lambda temp: self._append_log(f"Thermal resume: GPU {temp:.0f} C")
+        )
+        try:
+            self.monitor_panel.stats_updated.disconnect(self._on_monitor_stats)
+        except TypeError:
+            pass
+        self.monitor_panel.stats_updated.connect(self._on_monitor_stats)
+        self.dev_worker.finished.connect(self._cleanup_dev_worker)
+        self.dev_worker.start()
+
+    def _on_monitor_stats(self, stats) -> None:
+        if self.dev_worker and self.dev_worker.isRunning():
+            self.dev_worker.update_gpu_temp(getattr(stats, "gpu_temp", 0.0))
+
+    def _on_dev_epoch(self, epoch: int, loss: float, metrics: dict) -> None:
+        self._last_dev_train_loss = float(loss)
+        pct = int(100 * epoch / max(1, self._total_dev_epochs))
+        self.progress_bar.setValue(pct)
+        metric_text = "  ".join(f"{key}: {float(value):.4f}" for key, value in metrics.items())
+        self._append_log(f"[Train] Epoch {epoch}/{self._total_dev_epochs} loss={float(loss):.5f} {metric_text}")
+
+    def _on_dev_val(self, epoch: int, loss: float, metrics: dict) -> None:
+        plot_metrics = {}
+        if "accuracy" in metrics:
+            plot_metrics["val_acc"] = metrics["accuracy"]
+        if "dice" in metrics:
+            plot_metrics["val_f1"] = metrics["dice"]
+        if "iou" in metrics and "val_acc" not in plot_metrics:
+            plot_metrics["val_acc"] = metrics["iou"]
+        self.plot_panel.add_data(epoch, self._last_dev_train_loss, float(loss), plot_metrics)
+        self.state.training_metrics = {key: float(value) for key, value in metrics.items()}
+        metric_text = "  ".join(f"{key}: {float(value):.4f}" for key, value in metrics.items())
+        self._append_log(f"[Val]   Epoch {epoch}/{self._total_dev_epochs} loss={float(loss):.5f} {metric_text}")
+
+    def _on_dev_done(self, msg: str) -> None:
+        self._append_log(msg)
+        self.progress_bar.setValue(100)
+        self.btn_train.setEnabled(True)
+        self.btn_stop.setEnabled(False)
+        if hasattr(self, "btn_back"):
+            self.btn_back.setEnabled(True)
+        QMessageBox.information(self, "Developer Training Complete", msg)
+
+    def _on_dev_error(self, msg: str) -> None:
+        self._append_log(msg)
+        self.btn_train.setEnabled(True)
+        self.btn_stop.setEnabled(False)
+        if hasattr(self, "btn_back"):
+            self.btn_back.setEnabled(True)
+        QMessageBox.critical(self, "Developer Training Error", msg[:1200])
+
+    def _cleanup_dev_worker(self) -> None:
+        try:
+            self.monitor_panel.stats_updated.disconnect(self._on_monitor_stats)
+        except TypeError:
+            pass
+        self.dev_worker = None

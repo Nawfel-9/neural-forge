@@ -59,6 +59,7 @@ class ProjectState:
     loss_fn_name: str = field(default_factory=lambda: DEFAULT_LOSS["classification"])
     optimizer_name: str = field(default_factory=lambda: DEFAULT_OPTIMIZER)
     training_metrics: dict = field(default_factory=dict)  # Stores final metrics after training
+    training_mode: str = "nocode"      # "nocode" | "dev"
 
     # ---- Developer Mode ----
     dev_project_path: str = ""        # Imported PyTorch project folder

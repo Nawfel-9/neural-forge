@@ -18,6 +18,7 @@ flowchart TB
     DevGuide["Developer Mode Guide"]
     DevImport["Folder Picker"]
     DevStatus["Developer Mode Status"]
+    DevTrain["Training View (Developer Mode)"]
     Assistant["AI Assistant"]
 
     Home -- "No-Code Pipeline" --> Data
@@ -27,6 +28,7 @@ flowchart TB
     Home -- "Developer Mode" --> DevGuide
     DevGuide --> DevImport
     DevImport --> DevStatus
+    DevStatus -- "Continue to Training" --> DevTrain
     DevStatus -- "Use No-Code Pipeline" --> Data
     Home --> Assistant
     Data --> Assistant
@@ -35,9 +37,9 @@ flowchart TB
     Export --> Assistant
 ```
 
-Developer Mode validates a code project folder and preserves the imported project path. The AI Assistant can use the current project state as context, but it does not execute training or mutate project files.
+Developer Mode validates a code project folder and preserves the imported project path. When all required files are present, the status page can switch the Training view into Developer Mode. The AI Assistant can use the current project state as context, but it does not execute training or mutate project files.
 
-The repository also contains experimental Developer Mode scaffolding (`backend.dev_trainer`, `utils.config_schema`, and `ui.window_project_validation`). That code is not wired into the current `NeuralForgeApp` flow; the production UI still uses the status page in `main.py` and keeps Developer Mode training disabled.
+The repository also contains a static-validation screen scaffold (`ui.window_project_validation`) that is not currently added to the main stacked-widget flow.
 
 ---
 
@@ -59,6 +61,7 @@ device: str                    # "cpu" | "cuda" | "mps"
 loss_fn_name: str
 optimizer_name: str
 training_metrics: dict         # final metrics used by the report dialog
+training_mode: str             # "nocode" | "dev"
 dev_project_path: str
 ```
 
@@ -127,15 +130,24 @@ Developer Mode uses `ui.window_project_guide.ProjectGuideDialog` to explain requ
 | `dataset.py` | `metrics.py` |
 | `config.yaml` | `checkpoints/`, `logs/` |
 
-The import path is stored as `ProjectState.dev_project_path`.
+The import path is stored as `ProjectState.dev_project_path`. If all required files exist, **Continue to Training** sets `ProjectState.training_mode = "dev"` and opens the Training view.
 
-Experimental Developer Mode files currently present in the tree:
+Developer Mode training uses this runtime contract:
+
+| File | Expected hook |
+|---|---|
+| `model.py` | `get_model(config: dict) -> torch.nn.Module` |
+| `dataset.py` | `get_dataloader(config: dict, split: str) -> torch.utils.data.DataLoader` |
+| `loss.py` | Optional `get_loss(config: dict) -> torch.nn.Module` |
+| `metrics.py` | Optional `get_metrics(config: dict) -> dict[str, callable]` |
+
+Related Developer Mode files:
 
 | File | Scope |
 |---|---|
 | `ui/window_project_validation.py` | Static AST validation screen scaffold; not currently added to `main.py`'s stacked-widget flow |
-| `backend/dev_trainer.py` | QThread-based user-project trainer scaffold; not currently launched by the main app |
-| `utils/config_schema.py` | Small serializable config object used by the experimental trainer scaffold |
+| `backend/dev_trainer.py` | QThread-based user-project trainer launched from the Training view in Developer Mode |
+| `utils/config_schema.py` | Small serializable config object used by the Developer Mode trainer |
 
 ---
 
@@ -160,13 +172,13 @@ The assistant receives a compact project summary generated from `ProjectState`: 
 
 ## Backend Boundaries
 
-Production no-code backend modules do not import PyQt6. The exception is `backend/dev_trainer.py`, which is experimental Developer Mode scaffolding and intentionally owns a `QThread`.
+Production no-code backend modules do not import PyQt6. The exception is `backend/dev_trainer.py`, which is Developer Mode training scaffolding and intentionally owns a `QThread`.
 
 | Module | Responsibility |
 |---|---|
 | `backend/assistant_client.py` | NVIDIA API settings, project context summary, streaming chat responses |
 | `backend/data_handler.py` | Loading, profiling, cleaning, feature engineering, preprocessing, splitting |
-| `backend/dev_trainer.py` | Experimental Developer Mode user-project training worker scaffold |
+| `backend/dev_trainer.py` | Developer Mode user-project training worker scaffold |
 | `backend/model_builder.py` | Blueprint translation and ghost-run validation |
 | `backend/training_config.py` | Loss/optimizer registries |
 | `backend/exporter.py` | ONNX export |

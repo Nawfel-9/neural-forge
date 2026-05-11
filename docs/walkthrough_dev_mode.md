@@ -6,9 +6,9 @@
 
 ## Current Scope
 
-Developer Mode is an import and validation workflow. It does not yet execute the imported code, open a code editor, or train a user-supplied project. Those integration points are intentionally left out of the production-ready no-code release.
+Developer Mode imports and validates an existing PyTorch project folder. When the required files are present, it can hand the project to the shared Training view in Developer Mode.
 
-After the `yassine_dev_mode` merge, the repository contains experimental scaffolding for deeper static validation and code-first training. Those files are kept in the tree for future integration, but they are not currently connected to the main app navigation. The current production behavior remains: import a folder, show a checklist, preserve the path, and keep "Continue to Training" disabled.
+The current integration does not open a code editor or perform static AST validation in the main flow. It uses the status page in `main.py`, then launches `backend.dev_trainer.DevTrainer` from `ui.window_training.TrainingWindow`.
 
 ---
 
@@ -20,12 +20,14 @@ flowchart TB
     Guide["ProjectGuideDialog"]
     Picker["Folder Picker"]
     Status["Developer Mode Status Page"]
+    Train["Training View (Developer Mode)"]
     Data["No-Code Data Lab"]
 
     Home -- "Import Project" --> Guide
     Guide -- "Accepted" --> Picker
     Picker -- "Folder selected" --> Status
     Status -- "Import PyTorch Project" --> Guide
+    Status -- "Continue to Training" --> Train
     Status -- "Use No-Code Pipeline" --> Data
 ```
 
@@ -38,16 +40,17 @@ The sidebar also exposes Developer Mode. If no folder has been imported yet, cli
 | File | Purpose |
 |---|---|
 | [`main.py`](../main.py) | Home cards, Developer Mode status page, folder-picker flow |
+| [`ui/window_training.py`](../ui/window_training.py) | Developer Mode branch inside the shared Training view |
 | [`ui/window_project_guide.py`](../ui/window_project_guide.py) | Modal onboarding dialog that explains required project structure |
-| [`utils/project_state.py`](../utils/project_state.py) | Stores `dev_project_path` |
+| [`backend/dev_trainer.py`](../backend/dev_trainer.py) | QThread-based user-project training scaffold |
+| [`utils/config_schema.py`](../utils/config_schema.py) | Serializable configuration object used by the Developer Mode trainer |
+| [`utils/project_state.py`](../utils/project_state.py) | Stores `dev_project_path` and `training_mode` |
 
-Experimental files present but not wired into `NeuralForgeApp`:
+Scaffold file present but not wired into `NeuralForgeApp`:
 
 | File | Purpose |
 |---|---|
 | [`ui/window_project_validation.py`](../ui/window_project_validation.py) | Static AST validation screen scaffold for checking required functions |
-| [`backend/dev_trainer.py`](../backend/dev_trainer.py) | QThread-based user-project training scaffold |
-| [`utils/config_schema.py`](../utils/config_schema.py) | Serializable configuration object used by the experimental trainer |
 
 ---
 
@@ -76,15 +79,31 @@ my_project/
 - Checks required files: `model.py`, `dataset.py`, `config.yaml`.
 - Checks optional files/folders: `loss.py`, `metrics.py`, `checkpoints`, `logs`.
 - Shows a green ready message only when all required files exist.
-- Keeps "Continue to Training" disabled because code-first training execution is not implemented yet.
+- Enables "Continue to Training" when all required files exist.
+- Sets `ProjectState.training_mode` to `"dev"` and opens the Training view.
 
-The experimental `ProjectValidationWindow` uses a stricter function-contract check (`build_model`, `build_dataloaders`, optional `build_criterion`, optional `compute_metrics`) and treats `config.yaml` as optional. That is not the active `main.py` flow, whose status page checks only the file/folder names listed above.
+`ProjectValidationWindow` uses a stricter function-contract check (`build_model`, `build_dataloaders`, optional `build_criterion`, optional `compute_metrics`) and treats `config.yaml` as optional. That is not the active `main.py` flow, whose status page checks only the file/folder names listed above.
+
+---
+
+## Training Contract
+
+Developer Mode training currently expects these runtime hooks:
+
+| File | Required hook |
+|---|---|
+| `model.py` | `get_model(config: dict) -> torch.nn.Module` |
+| `dataset.py` | `get_dataloader(config: dict, split: str) -> DataLoader` |
+| `loss.py` | Optional `get_loss(config: dict) -> torch.nn.Module` |
+| `metrics.py` | Optional `get_metrics(config: dict) -> dict[str, callable]` |
+
+If `loss.py` or `metrics.py` is absent, built-in defaults are used for `classification` and `segmentation` tasks.
 
 ---
 
 ## Config Bridge Convention
 
-Future Developer Mode execution should use `config.yaml` as the UI-to-script bridge:
+Developer Mode training reads `config.yaml` through `utils.config_schema.DevProjectConfig`:
 
 ```yaml
 learning_rate: 0.001
@@ -101,5 +120,3 @@ import yaml
 cfg = yaml.safe_load(open("config.yaml", encoding="utf-8"))
 lr = cfg["learning_rate"]
 ```
-
-The experimental trainer currently expects a different callable contract (`get_model(config)` and `get_dataloader(config, split)`) than `ProjectValidationWindow` checks. Before wiring either scaffold into the app, that contract should be unified and covered by tests.
