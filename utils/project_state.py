@@ -30,9 +30,12 @@ class ProjectState:
 
     # ---- Window 1: Data ----
     dataframe: Optional[pd.DataFrame] = None
+    dataset_path: str = ""           # Path to the loaded CSV/Parquet file
     target_column: str = ""
     problem_type: str = "classification"  # "classification" | "regression"
     pipeline: Any = None  # Stores the preprocessing DataPipeline
+    cleaning_config: dict = field(default_factory=dict) # History of cleaning
+    prep_config: dict = field(default_factory=dict) # Preprocessing settings used
     split_config: dict = field(
         default_factory=lambda: {"method": "percentage", "ratio": 0.8}
     )
@@ -55,6 +58,7 @@ class ProjectState:
     device: str = "cpu"              # "cpu" | "cuda" | "mps"
     loss_fn_name: str = field(default_factory=lambda: DEFAULT_LOSS["classification"])
     optimizer_name: str = field(default_factory=lambda: DEFAULT_OPTIMIZER)
+    training_metrics: dict = field(default_factory=dict)  # Stores final metrics after training
 
     # ---- Developer Mode ----
     dev_project_path: str = ""        # Imported PyTorch project folder

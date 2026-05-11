@@ -8,6 +8,7 @@ import torch
 
 from utils.project_state import ProjectState
 from backend.exporter import export_to_onnx
+from ui.dialog_report import ReportDialog
 
 class ExportWindow(QWidget):
     """
@@ -101,6 +102,34 @@ class ExportWindow(QWidget):
         export_row.addWidget(onnx_group)
 
         root.addLayout(export_row)
+        
+        root.addSpacing(20)
+        
+        # ── Professional Report ──
+        report_lay = QHBoxLayout()
+        report_lay.addStretch()
+        self.btn_gen_report = QPushButton("📄 Générer Rapport Synthesis")
+        self.btn_gen_report.setMinimumHeight(54)
+        self.btn_gen_report.setFixedWidth(300)
+        self.btn_gen_report.setStyleSheet("""
+            QPushButton {
+                background-color: #1E293B;
+                color: #0EA5E9;
+                border: 2px solid #0EA5E9;
+                border-radius: 8px;
+                font-weight: 800;
+                font-size: 11pt;
+            }
+            QPushButton:hover {
+                background-color: #0EA5E9;
+                color: #FFFFFF;
+            }
+        """)
+        self.btn_gen_report.clicked.connect(self._generate_report)
+        report_lay.addWidget(self.btn_gen_report)
+        report_lay.addStretch()
+        root.addLayout(report_lay)
+
         root.addStretch()
 
         self.refresh_status()
@@ -158,3 +187,6 @@ class ExportWindow(QWidget):
                     QMessageBox.critical(self, "Export Failed", msg)
             except Exception as exc:
                 QMessageBox.critical(self, "Export Failed", f"Unexpected error:\n{exc}")
+    def _generate_report(self):
+        dlg = ReportDialog(self.state, self)
+        dlg.exec()

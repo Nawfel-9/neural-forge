@@ -11,9 +11,9 @@ from PyQt6.QtWidgets import QApplication
 # ─── Dark Mode Tokens ("Deep Night") ───
 DARK_BG_SPACE     = "#0B0F17"
 DARK_BG_SIDEBAR   = "#111827"
-DARK_BG_CARD      = "rgba(15, 23, 42, 0.4)"
+DARK_BG_CARD      = "rgba(30, 41, 59, 0.45)"
 DARK_BG_INPUT     = "rgba(15, 23, 42, 0.6)"
-DARK_BORDER       = "rgba(255, 255, 255, 0.08)"
+DARK_BORDER       = "rgba(255, 255, 255, 0.06)"
 DARK_BORDER_FOCUS = "#38BDF8"
 DARK_TEXT_MAIN    = "#F1F5F9"
 DARK_TEXT_MUTED   = "#64748B"
@@ -164,6 +164,31 @@ QLabel.PageSubtitle {{
     color: {text_muted};
 }}
 
+QLabel.HeroTitle {{
+    font-size: 42pt;
+    font-weight: 900;
+    letter-spacing: -1px;
+    color: {accent};
+}}
+
+QLabel.HeroSubtitle {{
+    font-size: 14pt;
+    color: {text_muted};
+    font-weight: 500;
+}}
+
+/* ── Glass Cards ───────────────────────────────────────────────────────── */
+QFrame.GlassCard {{
+    background-color: {bg_card};
+    border: 1px solid {border};
+    border-radius: {RADIUS};
+}}
+
+QFrame.GlassCard:hover {{
+    background-color: {hover_overlay};
+    border-color: {border_focus};
+}}
+
 /* ── Group Box (Dashboard Cards) ───────────────────────────────────────── */
 QGroupBox {{
     background-color: {bg_card};
@@ -220,6 +245,11 @@ QPushButton[class="primary"] {{
 
 QPushButton[class="primary"]:hover {{
     background-color: {border_focus};
+}}
+
+QPushButton[class="primary"]:disabled {{
+    background-color: {text_muted};
+    color: rgba(255, 255, 255, 0.4);
 }}
 
 QPushButton[class="danger"] {{
@@ -350,5 +380,32 @@ QCheckBox::indicator:checked {{
 
 QCheckBox::indicator:hover {{
     border-color: {border_focus};
+}}
+
+/* ── Specific Overrides ────────────────────────────────────────────────── */
+QFrame#layerRow, QFrame#inputLayerRow {{
+    background-color: {bg_card};
+    border: 1px solid {border};
+    border-radius: {RADIUS_SM};
+}}
+
+QFrame#layerRow:hover {{
+    border-color: {border_focus};
+    background-color: {hover_overlay};
+}}
+
+QTextEdit.CodeConsole {{
+    background-color: {bg_input};
+    color: {text_main};
+    font-family: "Consolas", "Monaco", "Courier New", monospace;
+    border: 1px solid {border};
+    border-radius: {RADIUS_SM};
+    font-size: 9pt;
+}}
+
+QLabel.StatText {{
+    color: {text_muted};
+    font-family: "Consolas", "Monaco", "Courier New", monospace;
+    font-size: 9pt;
 }}
 """

@@ -271,6 +271,11 @@ class DataWindow(QWidget):
         worker.error.connect(lambda: self._cleanup_task(thread, worker))
         thread.start()
 
+    def apply_theme(self, is_dark: bool) -> None:
+        self.is_dark = is_dark
+        self.lbl_status.setStyleSheet(f"color: {'#64748B' if is_dark else '#475569'}; font-size: 9pt;")
+        # No other specific updates needed as QSS handles the rest
+
     def _on_worker_error(self, msg: str):
         self.progress_bar.setVisible(False)
         self.lbl_status.setText("Error")
@@ -348,11 +353,20 @@ class DataWindow(QWidget):
     def _load_data(self):
         path, _ = QFileDialog.getOpenFileName(self, "Load Data", "", "Data Files (*.csv *.parquet)")
         if path:
+            self.state.dataset_path = path
             self._start_worker("load", filepath=path)
 
     def _apply_cleaning(self):
         if self.df is None: return
         out_cols = [self.list_out_cols.item(i).text() for i in range(self.list_out_cols.count()) if self.list_out_cols.item(i).checkState() == Qt.CheckState.Checked]
+        
+        self.state.cleaning_config = {
+            "nan_strategy": self.combo_nan.currentText(),
+            "outlier_method": self.combo_out_method.currentText(),
+            "outlier_action": self.combo_out_action.currentText(),
+            "outlier_cols": out_cols
+        }
+        
         self._start_worker("clean", df=self.df, strategy=self.combo_nan.currentText(), outlier_cols=out_cols, outlier_method=self.combo_out_method.currentText(), outlier_action=self.combo_out_action.currentText())
 
     def _create_interaction(self):
@@ -381,6 +395,7 @@ class DataWindow(QWidget):
             'pca_enabled': self.check_pca.isChecked(),
             'pca_components': self.spin_pca.value()
         }
+        self.state.prep_config = config
         self._start_worker("preprocess", df=self.df, target=target, config=config)
 
     def _on_next(self):

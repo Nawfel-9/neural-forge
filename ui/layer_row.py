@@ -66,7 +66,6 @@ class LayerRow(QFrame):
 
     # ── UI construction ─────────────────────────────────────────────────────
     def _build_ui(self) -> None:
-        self.setFrameShape(QFrame.Shape.Box)
         self.setObjectName("layerRow")
 
         layout = QHBoxLayout(self)
@@ -210,6 +209,12 @@ class LayerRow(QFrame):
         self.remove_requested.emit(self.row_index)
 
     # ── Public API ──────────────────────────────────────────────────────────
+    def apply_theme(self, is_dark: bool) -> None:
+        self.is_dark = is_dark
+        index_color = "#58a6ff" if is_dark else "#0284C7"
+        self.lbl_index.setStyleSheet(f"font-weight: 700; color: {index_color};")
+        # Text main color for labels will be handled by QSS/QWidget inheritance
+
     def set_index(self, index: int) -> None:
         """Update the displayed row number after reordering."""
         self.row_index = index
@@ -229,7 +234,7 @@ class LayerRow(QFrame):
             self.spin_neurons.setEnabled(False)
             self.lbl_neurons.setText("Neurons (Locked):")
             self.lbl_index.setText(f"#{self.row_index + 1} (Output)")
-            self.lbl_index.setFixedWidth(70)
+            self.lbl_index.setFixedWidth(80)
         else:
             self.combo_type.setEnabled(True)
             self.spin_neurons.setEnabled(True)

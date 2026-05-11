@@ -20,7 +20,7 @@ class MonitorPanel(QLabel):
     """
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setStyleSheet("color: #8b949e; font-family: monospace; font-size: 13px;")
+        self.setProperty("class", "StatText")
         self.setText("CPU: 0% | RAM: 0% | VRAM: N/A")
 
         self._timer = QTimer(self)

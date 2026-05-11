@@ -37,29 +37,52 @@ class PlotPanel(QWidget):
 
         # 1. Loss Plot
         self.loss_plot = pg.PlotWidget()
-        self.loss_plot.setBackground('#0d1117')
-        self.loss_plot.setTitle("Loss Curve", color="#ffffff")
         self.loss_plot.setLabel('left', 'Loss')
         self.loss_plot.setLabel('bottom', 'Epoch')
         self.loss_plot.addLegend()
-        self.train_loss_line = self.loss_plot.plot(pen=pg.mkPen(color='#3fb950', width=2), name="Train Loss")
-        self.val_loss_line = self.loss_plot.plot(pen=pg.mkPen(color='#58a6ff', width=2), name="Val Loss")
+        self.train_loss_line = self.loss_plot.plot(pen=pg.mkPen(color='#3fb950', width=2.5), name="Train Loss")
+        self.val_loss_line = self.loss_plot.plot(pen=pg.mkPen(color='#58a6ff', width=2.5), name="Val Loss")
         layout.addWidget(self.loss_plot)
 
-        # 2. Metrics Plot (only for classification)
+        # 2. Metrics Plot
         self.metric_plot = pg.PlotWidget()
-        self.metric_plot.setBackground('#0d1117')
-        self.metric_plot.setTitle("Validation Metrics", color="#ffffff")
         self.metric_plot.setLabel('left', 'Score')
         self.metric_plot.setLabel('bottom', 'Epoch')
         self.metric_plot.setYRange(0, 1.0)
         self.metric_plot.addLegend()
 
-        self.val_acc_line = self.metric_plot.plot(pen=pg.mkPen(color='#a371f7', width=2), name="Val Acc")
-        self.val_f1_line = self.metric_plot.plot(pen=pg.mkPen(color='#f0883e', width=2), name="Val F1")
+        self.val_acc_line = self.metric_plot.plot(pen=pg.mkPen(color='#a371f7', width=2.5), name="Val Acc")
+        self.val_f1_line = self.metric_plot.plot(pen=pg.mkPen(color='#f0883e', width=2.5), name="Val F1")
 
         layout.addWidget(self.metric_plot)
         self.metric_plot.setVisible(self.is_classification)
+
+        # Apply initial theme (default to dark if not set)
+        self.apply_theme(True)
+
+    def apply_theme(self, is_dark: bool) -> None:
+        """Update plot colors to match the current theme."""
+        bg_color = "#0B0F17" if is_dark else "#F8FAFC"
+        text_color = "#F1F5F9" if is_dark else "#0F172A"
+        grid_color = "rgba(255, 255, 255, 0.1)" if is_dark else "rgba(0, 0, 0, 0.1)"
+
+        for plot in [self.loss_plot, self.metric_plot]:
+            plot.setBackground(bg_color)
+            plot.getAxis('left').setPen(text_color)
+            plot.getAxis('left').setTextPen(text_color)
+            plot.getAxis('bottom').setPen(text_color)
+            plot.getAxis('bottom').setTextPen(text_color)
+            
+            title_text = "Loss Curve" if plot == self.loss_plot else "Validation Metrics"
+            plot.setTitle(title_text, color=text_color, size="12pt")
+
+            # Update legend text color
+            legend = plot.plotItem.legend
+            if legend:
+                for item in legend.items:
+                    for label in item:
+                        if isinstance(label, pg.LabelItem):
+                            label.setAttr('color', text_color)
 
     def set_is_classification(self, is_classification: bool) -> None:
         self.is_classification = is_classification

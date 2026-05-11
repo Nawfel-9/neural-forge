@@ -61,9 +61,7 @@ class ModelBuilderWindow(QWidget):
 
         # ── Visual Input Layer (Immutable) ──────────────────────────────────
         self.input_layer_frame = QFrame()
-        self.input_layer_frame.setFrameShape(QFrame.Shape.Box)
         self.input_layer_frame.setObjectName("inputLayerRow")
-        self.input_layer_frame.setStyleSheet("background-color: #161b22; border: 1px solid #30363d; border-radius: 4px;")
 
         in_layout = QHBoxLayout(self.input_layer_frame)
         in_layout.setContentsMargins(12, 8, 12, 8)
@@ -77,18 +75,19 @@ class ModelBuilderWindow(QWidget):
 
         in_layout.addWidget(QLabel("Type:"))
         lbl_type = QLabel("Input Features")
-        lbl_type.setStyleSheet("font-weight: 600; color: #c9d1d9;")
+        lbl_type.setProperty("class", "StatText")
         lbl_type.setFixedWidth(130)
         in_layout.addWidget(lbl_type)
 
         self.lbl_in_features = QLabel("Features: ?")
-        self.lbl_in_features.setStyleSheet("color: #8b949e;")
+        self.lbl_in_features.setProperty("class", "StatText")
         in_layout.addWidget(self.lbl_in_features)
 
         in_layout.addStretch()
 
         lbl_locked = QLabel("🔒 Auto-Configured")
-        lbl_locked.setStyleSheet("color: #8b949e; font-size: 11px;")
+        lbl_locked.setProperty("class", "StatText")
+        lbl_locked.setStyleSheet("font-size: 11px;")
         in_layout.addWidget(lbl_locked)
 
         self.layer_layout.addWidget(self.input_layer_frame)
@@ -138,6 +137,7 @@ class ModelBuilderWindow(QWidget):
         btn_bar.addWidget(self.btn_build)
 
         self.btn_next = QPushButton("Proceed to Training →")
+        self.btn_next.setProperty("class", "primary")
         self.btn_next.setMinimumHeight(44)
         self.btn_next.setEnabled(False)
         self.btn_next.clicked.connect(self._on_next)
@@ -147,6 +147,13 @@ class ModelBuilderWindow(QWidget):
 
         # Finally refresh info label now that all widgets are instantiated
         self.refresh_data_info()
+
+    def apply_theme(self, is_dark: bool) -> None:
+        self.is_dark = is_dark
+        self.lbl_count.setStyleSheet(f"color: {'#64748B' if is_dark else '#475569'}; font-weight: 600;")
+        self.lbl_data_info.setStyleSheet(f"color: {'#0EA5E9' if is_dark else '#0284C7'}; font-weight: 600; padding: 4px 0;")
+        for row in self._layer_rows:
+            row.apply_theme(is_dark)
 
     def refresh_data_info(self) -> None:
         if self.state.dataframe is not None:

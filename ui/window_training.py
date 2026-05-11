@@ -81,15 +81,15 @@ class TrainingWindow(QWidget):
         visuals_row.addWidget(self.plot_panel, stretch=2)
 
         self.tabs = QTabWidget()
-        self.tabs.setStyleSheet("QTabWidget::pane { border: 1px solid #30363d; background: #0d1117; }")
+        self.tabs.setObjectName("TrainingTabs")
 
         self.log_console = QTextEdit()
         self.log_console.setReadOnly(True)
-        self.log_console.setStyleSheet("font-family: monospace; background-color: #0d1117; color: #c9d1d9; border: none;")
+        self.log_console.setProperty("class", "CodeConsole")
 
         self.model_summary = QTextEdit()
         self.model_summary.setReadOnly(True)
-        self.model_summary.setStyleSheet("font-family: monospace; background-color: #0d1117; color: #c9d1d9; border: none;")
+        self.model_summary.setProperty("class", "CodeConsole")
 
         self.tabs.addTab(self.log_console, "Logs")
         self.tabs.addTab(self.model_summary, "Model Summary")
@@ -242,6 +242,15 @@ class TrainingWindow(QWidget):
         if kfold_lbl:
             kfold_lbl.setVisible(not is_percentage)
 
+    def apply_theme(self, is_dark: bool) -> None:
+        """Propagate theme changes to sub-panels and update specific widgets."""
+        self.plot_panel.apply_theme(is_dark)
+        
+        # Force re-polish for class-based styles
+        for widget in [self.log_console, self.model_summary, self.monitor_panel]:
+            widget.style().unpolish(widget)
+            widget.style().polish(widget)
+
     def refresh_ui(self) -> None:
         self.spin_lr.setValue(self.state.hyperparams.get("lr", 0.001))
         self.spin_epochs.setValue(self.state.hyperparams.get("epochs", 50))
@@ -376,6 +385,7 @@ class TrainingWindow(QWidget):
         self.plot_panel.add_data(epoch, t_loss, v_loss, metrics)
 
     def _on_evaluation(self, metrics: dict) -> None:
+        self.state.training_metrics = metrics  # Store for report generation
         self._clear_metrics()
         for name, value in metrics.items():
             metric_card = QWidget()

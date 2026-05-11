@@ -25,24 +25,33 @@ class HomeDashboard(QWidget):
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.setContentsMargins(48, 48, 48, 48)
         layout.setSpacing(18)
+        layout.addStretch(1)  # Top stretch
+
+        # Hero Header Group
+        hero_header = QVBoxLayout()
+        hero_header.setSpacing(0)
+        hero_header.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         logo_label = QLabel()
         pixmap = QPixmap("assets/logo.png")
         if not pixmap.isNull():
-            scaled_pixmap = pixmap.scaled(160, 160, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            scaled_pixmap = pixmap.scaled(240, 240, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
             logo_label.setPixmap(scaled_pixmap)
         logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(logo_label)
+        hero_header.addWidget(logo_label)
 
         title = QLabel("NEURAL FORGE")
+        title.setProperty("class", "HeroTitle")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title.setStyleSheet("font-size: 32pt; font-weight: 800; letter-spacing: 4px; color: #00A3FF;")
-        layout.addWidget(title)
+        hero_header.addWidget(title)
 
-        subtitle = QLabel("Premium Data Science & Deep Learning Platform")
-        subtitle.setStyleSheet("color: #64748B; font-size: 14pt; font-weight: 500; margin-bottom: 30px;")
+        subtitle = QLabel("The Ultimate Deep Learning Workshop")
+        subtitle.setProperty("class", "HeroSubtitle")
         subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(subtitle)
+        hero_header.addWidget(subtitle)
+
+        layout.addLayout(hero_header)
+        layout.addStretch(1)  # Space between logo and cards
 
         path_row = QHBoxLayout()
         path_row.setSpacing(18)
@@ -63,18 +72,12 @@ class HomeDashboard(QWidget):
         ))
         path_row.addStretch()
         layout.addLayout(path_row)
+        layout.addStretch(1)  # Push everything up slightly
 
     def _build_path_card(self, title: str, body: str, button_text: str, callback, primary: bool) -> QFrame:
         card = QFrame()
-        card.setObjectName("HomeActionCard")
-        card.setFixedSize(340, 190)
-        card.setStyleSheet("""
-            QFrame#HomeActionCard {
-                background-color: rgba(15, 23, 42, 0.42);
-                border: 1px solid rgba(255, 255, 255, 0.08);
-                border-radius: 8px;
-            }
-        """)
+        card.setProperty("class", "GlassCard")
+        card.setFixedSize(380, 220)
 
         card_layout = QVBoxLayout(card)
         card_layout.setContentsMargins(22, 20, 22, 20)
@@ -295,13 +298,13 @@ class NeuralForgeApp(QMainWindow):
             ("Model Builder", 2),
             ("Train & Evaluate", 3),
             ("Export", 4),
-            ("Developer Mode", 5),
             ("AI Assistant", 6),
         ]
 
         for text, index in nav_items:
             btn = QPushButton(f"  {text}")
             btn.setProperty("class", "SidebarButton")
+            btn.setProperty("nav_index", index)
             btn.clicked.connect(lambda checked, idx=index: self._switch_tab(idx))
             self.nav_buttons.append(btn)
             sidebar_layout.addWidget(btn)
@@ -358,7 +361,7 @@ class NeuralForgeApp(QMainWindow):
 
     def _open_dev_mode(self):
         if ProjectGuideDialog.should_show():
-            guide = ProjectGuideDialog(parent=self)
+            guide = ProjectGuideDialog(is_dark=self.is_dark_mode, parent=self)
             if guide.exec() != QDialog.DialogCode.Accepted:
                 return
 
@@ -393,8 +396,8 @@ class NeuralForgeApp(QMainWindow):
         self.stack.setCurrentIndex(index)
 
         # Update active state of sidebar buttons
-        for i, btn in enumerate(self.nav_buttons):
-            if i == index:
+        for btn in self.nav_buttons:
+            if btn.property("nav_index") == index:
                 btn.setProperty("active", "true")
             else:
                 btn.setProperty("active", "false")
@@ -409,6 +412,12 @@ class NeuralForgeApp(QMainWindow):
     def _apply_current_theme(self):
         apply_theme_palette(QApplication.instance(), self.is_dark_mode)
         self.setStyleSheet(get_qss(self.is_dark_mode))
+        
+        # Notify all dashboards that need manual theme updates (plots, custom widgets)
+        for dash in [self.data_dash, self.model_dash, self.train_dash, 
+                     self.export_dash, self.assistant_dash, self.dev_dash]:
+            if hasattr(dash, "apply_theme"):
+                dash.apply_theme(self.is_dark_mode)
 
 def main() -> None:
     app = QApplication(sys.argv)
