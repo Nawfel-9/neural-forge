@@ -8,8 +8,8 @@
 
 | File | Purpose |
 |---|---|
-| [`utils/project_state.py`](../utils/project_state.py) | Shared data container for all 3 windows |
-| [`ui/styles.py`](../ui/styles.py) | Dark theme colours + QSS stylesheet |
+| [`utils/project_state.py`](../utils/project_state.py) | Shared data container for the app screens |
+| [`ui/styles.py`](../ui/styles.py) | Light/dark theme palettes + QSS stylesheet |
 | [`ui/layer_row.py`](../ui/layer_row.py) | Custom widget: one row = one layer |
 | [`ui/window_model.py`](../ui/window_model.py) | View 2: the Model Builder |
 | [`utils/blueprint_io.py`](../utils/blueprint_io.py) | JSON save/load for blueprints |
@@ -21,7 +21,7 @@
 
 ## 1. `utils/project_state.py` — The Shared Data Container
 
-**Why it exists:** The app has several views (Home → Data → Model → Training). They all need to share data — the loaded CSV, the layer blueprint, hyperparameters, etc. Instead of passing dozens of variables around, they all read/write to **one `ProjectState`** object.
+**Why it exists:** The app has several views (Home → Data → Model → Training → Export, plus Developer Mode and Assistant). They all need to share data — the loaded CSV, the layer blueprint, hyperparameters, final metrics, imported Developer Mode path, etc. Instead of passing dozens of variables around, they all read/write to **one `ProjectState`** object.
 
 ```python
 @dataclass
@@ -52,17 +52,17 @@ class ProjectState:
 
 ---
 
-## 2. `ui/styles.py` — Dark Theme
+## 2. `ui/styles.py` — Theme System
 
-**Why it exists:** Every widget inherits its appearance from this file, so the dark theme is defined in exactly one place.
+**Why it exists:** Every widget inherits its appearance from this file, so light and dark themes are defined in one place.
 
 ### Two layers of theming
 
-**Layer 1 — `apply_dark_palette(app)`**
+**Layer 1 — `apply_theme_palette(app, is_dark)`**
 Sets the **QPalette** (Qt's low-level colour system). Controls default widget colours that QSS can't always reach — window backgrounds, disabled text, highlights, tooltips, etc.
 
-**Layer 2 — `DARK_QSS` (string constant)**
-A large CSS-like stylesheet applied globally. Styles every widget type:
+**Layer 2 — `get_qss(is_dark)`**
+Returns the global CSS-like stylesheet for the selected theme. It styles every widget type:
 
 | Section | What it styles |
 |---|---|
@@ -77,16 +77,11 @@ A large CSS-like stylesheet applied globally. Styles every widget type:
 ### Colour tokens
 
 ```python
-BG_DARKEST    = "#0d1117"   # Main background
-BG_DARK       = "#161b22"   # Buttons, panels
-BG_CARD       = "#1c2129"   # Layer row cards
-BG_INPUT      = "#22272e"   # Input fields
-BORDER        = "#30363d"   # Borders
-TEXT_PRIMARY   = "#e6edf3"  # Main text
-TEXT_SECONDARY = "#8b949e"  # Muted text
-ACCENT        = "#58a6ff"   # Blue accent
-DANGER        = "#f85149"   # Red (remove/errors)
-SUCCESS       = "#3fb950"   # Green
+DARK_BG_SPACE = "#0B0F17"
+DARK_ACCENT   = "#0EA5E9"
+LIGHT_BG_SPACE = "#F8FAFC"
+LIGHT_ACCENT   = "#0284C7"
+RADIUS = "12px"
 ```
 
 ---

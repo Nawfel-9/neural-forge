@@ -26,6 +26,7 @@ Phase 5 adds real-time visual feedback, resource monitoring, final metrics displ
 - Polls CPU with `psutil.cpu_percent()`.
 - Polls RAM with `psutil.virtual_memory().percent`.
 - Polls CUDA allocated memory with `torch.cuda.memory_allocated()` when CUDA is available.
+- Emits `stats_updated` with a small payload that currently includes GPU temperature when optional NVML support is available.
 
 The monitor is intentionally lightweight and lives inside the training header.
 
@@ -63,6 +64,7 @@ Regression metrics include:
 | Data pipeline | Calls `DataPipeline.save(path)` |
 | PyTorch model | Calls `torch.save(state.model.state_dict(), path)` |
 | ONNX model | Calls `backend.exporter.export_to_onnx(state.model, state.dummy_tensor, path)` |
+| Synthesis report | Opens `ui.dialog_report.ReportDialog`, which can export a PDF report from project state and final metrics |
 
 The export screen enables buttons only when the relevant state is ready.
 

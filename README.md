@@ -16,7 +16,7 @@ Neural Forge is built with PyQt6 and PyTorch. The no-code workflow keeps the UI,
 | Training | Background `QThread` training, percentage split or K-Fold CV, CPU/CUDA/MPS selector, live loss and classification metric plots |
 | Evaluation | Final classification/regression metrics after training |
 | Export | Preprocessing pipeline `.pkl`, PyTorch `.pt/.pth`, and ONNX `.onnx` export |
-| Developer Mode | Project structure guide, folder import, required/optional file checklist |
+| Developer Mode | Project structure guide, folder import, required/optional file checklist; experimental static-validation/training scaffolding is present but not wired into the main app |
 | AI Assistant | NVIDIA API-backed chat tab with lightweight project context for engineering guidance |
 
 Developer Mode validates project structure and preserves the imported project path for the shared product workflow.
@@ -92,6 +92,7 @@ neural-forge/
 │   └── logo.png
 ├── backend/
 │   ├── data_handler.py          # Data loading, cleaning, preprocessing, splitting
+│   ├── dev_trainer.py           # Experimental Developer Mode training worker scaffold
 │   ├── assistant_client.py      # NVIDIA OpenAI-compatible assistant client
 │   ├── exporter.py              # ONNX export helper
 │   ├── model_builder.py         # Blueprint to nn.Sequential + ghost run
@@ -110,6 +111,7 @@ neural-forge/
 ├── ui/
 │   ├── custom_toggle.py
 │   ├── data_table_view.py
+│   ├── dialog_report.py
 │   ├── layer_row.py
 │   ├── monitor_panel.py
 │   ├── plot_panel.py
@@ -119,9 +121,11 @@ neural-forge/
 │   ├── window_export.py
 │   ├── window_model.py
 │   ├── window_project_guide.py
+│   ├── window_project_validation.py  # Experimental static validation screen
 │   └── window_training.py
 ├── utils/
 │   ├── blueprint_io.py
+│   ├── config_schema.py         # Experimental Developer Mode config schema
 │   ├── project_state.py
 │   └── validators.py
 └── workers/
@@ -143,13 +147,14 @@ neural-forge/
 | [Phase 4 Walkthrough](docs/walkthrough_phase4.md) | Training worker, hardware selection, loss/optimizer registry |
 | [Phase 5 Walkthrough](docs/walkthrough_phase5.md) | Plotting, monitoring, export |
 | [Developer Mode Walkthrough](docs/walkthrough_dev_mode.md) | Project guide dialog, folder import, checklist page |
+| [Preprocessing Walkthrough](docs/walkthrough_preprocessing.md) | Feature engineering, preprocessing, pipeline persistence |
 | [Refinements Walkthrough](docs/walkthrough_refinements.md) | Production polish and robustness updates |
 
 ---
 
 ## Architecture Highlights
 
-- **Decoupled backend**: backend modules do not import Qt.
+- **Decoupled no-code backend**: the production no-code backend modules do not import Qt; `backend/dev_trainer.py` is experimental Developer Mode scaffolding and intentionally separate.
 - **Shared project state**: `ProjectState` carries data, blueprint, model, training settings, and Developer Mode import state across screens.
 - **Registry-driven training config**: losses and optimizers live in `backend/training_config.py`.
 - **Threaded long-running work**: data operations use `DataLoaderWorker`; model training uses `TrainingWorker`.

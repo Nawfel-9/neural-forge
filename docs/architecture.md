@@ -37,6 +37,8 @@ flowchart TB
 
 Developer Mode validates a code project folder and preserves the imported project path. The AI Assistant can use the current project state as context, but it does not execute training or mutate project files.
 
+The repository also contains experimental Developer Mode scaffolding (`backend.dev_trainer`, `utils.config_schema`, and `ui.window_project_validation`). That code is not wired into the current `NeuralForgeApp` flow; the production UI still uses the status page in `main.py` and keeps Developer Mode training disabled.
+
 ---
 
 ## Runtime State
@@ -56,6 +58,7 @@ hyperparams: dict              # lr, epochs, batch_size
 device: str                    # "cpu" | "cuda" | "mps"
 loss_fn_name: str
 optimizer_name: str
+training_metrics: dict         # final metrics used by the report dialog
 dev_project_path: str
 ```
 
@@ -71,6 +74,7 @@ neural-forge/
 ├── backend/
 │   ├── assistant_client.py
 │   ├── data_handler.py
+│   ├── dev_trainer.py
 │   ├── exporter.py
 │   ├── model_builder.py
 │   └── training_config.py
@@ -79,6 +83,7 @@ neural-forge/
 ├── ui/
 │   ├── custom_toggle.py
 │   ├── data_table_view.py
+│   ├── dialog_report.py
 │   ├── layer_row.py
 │   ├── monitor_panel.py
 │   ├── plot_panel.py
@@ -88,8 +93,13 @@ neural-forge/
 │   ├── window_export.py
 │   ├── window_model.py
 │   ├── window_project_guide.py
+│   ├── window_project_validation.py
 │   └── window_training.py
 ├── utils/
+│   ├── blueprint_io.py
+│   ├── config_schema.py
+│   ├── project_state.py
+│   └── validators.py
 └── workers/
     ├── assistant_worker.py
     ├── data_loader_worker.py
@@ -119,6 +129,14 @@ Developer Mode uses `ui.window_project_guide.ProjectGuideDialog` to explain requ
 
 The import path is stored as `ProjectState.dev_project_path`.
 
+Experimental Developer Mode files currently present in the tree:
+
+| File | Scope |
+|---|---|
+| `ui/window_project_validation.py` | Static AST validation screen scaffold; not currently added to `main.py`'s stacked-widget flow |
+| `backend/dev_trainer.py` | QThread-based user-project trainer scaffold; not currently launched by the main app |
+| `utils/config_schema.py` | Small serializable config object used by the experimental trainer scaffold |
+
 ---
 
 ## AI Assistant
@@ -142,12 +160,13 @@ The assistant receives a compact project summary generated from `ProjectState`: 
 
 ## Backend Boundaries
 
-Backend modules do not import PyQt6:
+Production no-code backend modules do not import PyQt6. The exception is `backend/dev_trainer.py`, which is experimental Developer Mode scaffolding and intentionally owns a `QThread`.
 
 | Module | Responsibility |
 |---|---|
 | `backend/assistant_client.py` | NVIDIA API settings, project context summary, streaming chat responses |
 | `backend/data_handler.py` | Loading, profiling, cleaning, feature engineering, preprocessing, splitting |
+| `backend/dev_trainer.py` | Experimental Developer Mode user-project training worker scaffold |
 | `backend/model_builder.py` | Blueprint translation and ghost-run validation |
 | `backend/training_config.py` | Loss/optimizer registries |
 | `backend/exporter.py` | ONNX export |
@@ -174,6 +193,8 @@ Long-running work is delegated to workers:
 | `psutil` | CPU/RAM monitoring |
 | `onnx` | ONNX export validation |
 | `openai`, `python-dotenv` | NVIDIA AI Assistant API client and local environment loading |
+
+`pynvml` is used opportunistically for NVIDIA GPU temperature/utilization data when it is installed, but it is not required for the app to run.
 
 ---
 

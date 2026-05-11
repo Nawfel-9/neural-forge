@@ -8,6 +8,8 @@
 
 Developer Mode is an import and validation workflow. It does not yet execute the imported code, open a code editor, or train a user-supplied project. Those integration points are intentionally left out of the production-ready no-code release.
 
+After the `yassine_dev_mode` merge, the repository contains experimental scaffolding for deeper static validation and code-first training. Those files are kept in the tree for future integration, but they are not currently connected to the main app navigation. The current production behavior remains: import a folder, show a checklist, preserve the path, and keep "Continue to Training" disabled.
+
 ---
 
 ## User Flow
@@ -39,6 +41,14 @@ The sidebar also exposes Developer Mode. If no folder has been imported yet, cli
 | [`ui/window_project_guide.py`](../ui/window_project_guide.py) | Modal onboarding dialog that explains required project structure |
 | [`utils/project_state.py`](../utils/project_state.py) | Stores `dev_project_path` |
 
+Experimental files present but not wired into `NeuralForgeApp`:
+
+| File | Purpose |
+|---|---|
+| [`ui/window_project_validation.py`](../ui/window_project_validation.py) | Static AST validation screen scaffold for checking required functions |
+| [`backend/dev_trainer.py`](../backend/dev_trainer.py) | QThread-based user-project training scaffold |
+| [`utils/config_schema.py`](../utils/config_schema.py) | Serializable configuration object used by the experimental trainer |
+
 ---
 
 ## Required Project Structure
@@ -68,6 +78,8 @@ my_project/
 - Shows a green ready message only when all required files exist.
 - Keeps "Continue to Training" disabled because code-first training execution is not implemented yet.
 
+The experimental `ProjectValidationWindow` uses a stricter function-contract check (`build_model`, `build_dataloaders`, optional `build_criterion`, optional `compute_metrics`) and treats `config.yaml` as optional. That is not the active `main.py` flow, whose status page checks only the file/folder names listed above.
+
 ---
 
 ## Config Bridge Convention
@@ -89,3 +101,5 @@ import yaml
 cfg = yaml.safe_load(open("config.yaml", encoding="utf-8"))
 lr = cfg["learning_rate"]
 ```
+
+The experimental trainer currently expects a different callable contract (`get_model(config)` and `get_dataloader(config, split)`) than `ProjectValidationWindow` checks. Before wiring either scaffold into the app, that contract should be unified and covered by tests.

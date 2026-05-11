@@ -16,7 +16,7 @@ Post-Phase 5, we focused on transforming the "Neural Forge" prototype into a pro
 **Problem**: The previous version relied on manual `hide()` and `show()` calls between different windows, which felt disjointed and reset window positions.
 **Solution**:
 - Refactored `main.py` to use a central `QStackedWidget` controlled by `NeuralForgeApp`.
-- **State Synchronization**: Integrated `refresh_data_info()` and `refresh_ui()` hooks that trigger automatically upon page switching, ensuring the Model Builder and Training Studio always have the latest dataset context.
+- **State Synchronization**: Integrated `refresh_data_info()` and `refresh_ui()` hooks that trigger automatically upon page switching, ensuring the Model Builder and Training view always have the latest dataset context.
 
 ### 3. Automatic Label Encoding & Validation
 **Problem**: Users often encountered the cryptic `Assertion t >= 0 && t < n_classes failed` error when their target labels weren't zero-indexed (e.g., [1, 2, 3]) or didn't match the model's output size.
