@@ -1,4 +1,5 @@
 import sys
+import torch
 from pathlib import Path
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QHBoxLayout, QPushButton, QLabel, QStackedWidget,
@@ -105,11 +106,12 @@ class DevProjectWindow(QWidget):
     REQUIRED_FILES = ("model.py", "dataset.py", "config.yaml")
     OPTIONAL_FILES = ("loss.py", "metrics.py", "checkpoints", "logs")
 
-    def __init__(self, project_state: ProjectState, on_import=None, on_no_code=None, parent=None):
+    def __init__(self, project_state: ProjectState, on_import=None, on_no_code=None, on_train=None, parent=None):
         super().__init__(parent)
         self.state = project_state
         self._on_import_callback = on_import
         self._on_no_code_callback = on_no_code
+        self._on_train_callback = on_train  # ← add this
         self._file_rows: dict[str, QLabel] = {}
         self._build_ui()
         self.refresh_status()
@@ -164,10 +166,14 @@ class DevProjectWindow(QWidget):
         btn_import.clicked.connect(self._on_import_callback)
         btn_row.addWidget(btn_import)
 
+        # replace the existing btn_training lines with:
         self.btn_training = QPushButton("Continue to Training")
         self.btn_training.setMinimumHeight(44)
         self.btn_training.setEnabled(False)
         self.btn_training.setToolTip("Developer training integration is not implemented yet.")
+        self.btn_training.clicked.connect(
+            lambda: self._on_train_callback() if self._on_train_callback else None
+        )
         btn_row.addWidget(self.btn_training)
 
         btn_row.addStretch()
@@ -242,16 +248,13 @@ class DevProjectWindow(QWidget):
                 if filename in self.REQUIRED_FILES:
                     missing_required.append(filename)
 
+        # at the end of refresh_status, replace the existing btn_training enable logic:
         if missing_required:
-            self.lbl_project_status.setText(
-                "Project imported, but required files are missing: "
-                + ", ".join(missing_required)
-            )
-            self.lbl_project_status.setStyleSheet("color: #EF4444; font-weight: 700;")
+            self.btn_training.setEnabled(False)
+            self.btn_training.setToolTip("Fix missing required files first.")
         else:
-            self.lbl_project_status.setText("Project structure looks ready for Developer Mode.")
-            self.lbl_project_status.setStyleSheet("color: #10B981; font-weight: 700;")
-
+            self.btn_training.setEnabled(True)
+            self.btn_training.setToolTip("")
 
 class NeuralForgeApp(QMainWindow):
     """Main application window with persistent sidebar and content stack."""
@@ -337,6 +340,7 @@ class NeuralForgeApp(QMainWindow):
             self.state,
             on_import=self._open_dev_mode,
             on_no_code=self._start_no_code_pipeline,
+            on_train=self._go_to_training,  # ← add this
         )
         self.assistant_dash = AssistantWindow(self.state)
 
@@ -354,7 +358,12 @@ class NeuralForgeApp(QMainWindow):
         self._switch_tab(0)
 
     def _start_no_code_pipeline(self):
+        self.state.training_mode = "nocode"
         self._switch_tab(1)
+
+    def _go_to_training(self):
+        self.state.training_mode = "dev"
+        self._switch_tab(3)
 
     def _open_dev_mode(self):
         if ProjectGuideDialog.should_show():

@@ -55,7 +55,7 @@ class ProjectState:
     device: str = "cpu"              # "cpu" | "cuda" | "mps"
     loss_fn_name: str = field(default_factory=lambda: DEFAULT_LOSS["classification"])
     optimizer_name: str = field(default_factory=lambda: DEFAULT_OPTIMIZER)
-
+    training_mode: str = "nocode"
     # ---- Developer Mode ----
     dev_project_path: str = ""        # Imported PyTorch project folder
 
