@@ -1,0 +1,28 @@
+# ─────────────────────────────────────────────────────────
+#  Neural Forge — Developer Mode  |  config.yaml
+#  This file is auto-created if missing. Edit freely.
+# ─────────────────────────────────────────────────────────
+
+task: classification          # classification | segmentation
+
+# ── Training hyper-parameters ────────────────────────────
+epochs: 50
+batch_size: 16
+learning_rate: 0.001
+optimizer: adam               # adam | sgd
+device: cuda                  # cuda | cpu
+
+# ── Thermal safety ───────────────────────────────────────
+auto_pause_temp: 90           # pause  when GPU °C >= this
+resume_temp: 80               # resume when GPU °C <  this
+
+# ── Override hooks ───────────────────────────────────────
+# Set to null to use Neural Forge built-in defaults.
+# If loss.py / metrics.py exist in the project root, they
+# always take priority regardless of these values.
+loss: null
+metrics: null
+
+# ── Output directories (relative to project root) ────────
+checkpoint_dir: checkpoints
+log_dir: logs
