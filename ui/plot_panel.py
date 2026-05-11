@@ -54,10 +54,10 @@ class PlotPanel(QWidget):
         self.metric_plot.setLabel('bottom', 'Epoch')
         self.metric_plot.setYRange(0, 1.0)
         self.metric_plot.addLegend()
-        
+
         self.val_acc_line = self.metric_plot.plot(pen=pg.mkPen(color='#a371f7', width=2), name="Val Acc")
         self.val_f1_line = self.metric_plot.plot(pen=pg.mkPen(color='#f0883e', width=2), name="Val F1")
-        
+
         layout.addWidget(self.metric_plot)
         self.metric_plot.setVisible(self.is_classification)
 
@@ -77,7 +77,7 @@ class PlotPanel(QWidget):
         if self.is_classification and metrics:
             self.val_accs.append(metrics.get("val_acc", 0.0))
             self.val_f1s.append(metrics.get("val_f1", 0.0))
-            
+
             self.val_acc_line.setData(self.epochs, self.val_accs)
             self.val_f1_line.setData(self.epochs, self.val_f1s)
 

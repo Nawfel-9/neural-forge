@@ -1,32 +1,75 @@
 # Phase 5 Walkthrough: Visualization, Monitoring & Export
 
 ## Overview
-Phase 5 introduces real-time visual feedback, system resource monitoring, and a bridge to export trained models into universally accessible formats natively within the Training Studio (Window 3).
 
-## Key Components
+Phase 5 adds real-time visual feedback, resource monitoring, final metrics display, and deployment exports.
 
-### 1. Real-Time Loss Curves (`pyqtgraph`)
-**Purpose**: To replace static terminal logs with a dynamic visual representation of Training vs. Validation Loss out-of-the-box.
-**Mechanics**:
-- Replaced the full-window text console with a split view. 
-- Integrated `pyqtgraph.PlotWidget`, establishing a dark-themed plot matching the application styling.
-- `train_line` and `val_line` are bound to local lists (`self.plot_epochs`, `self.train_losses`, `self.val_losses`).
-- The `TrainingWorker.epoch_finished` signal directly triggers `_on_epoch`, pushing the data arrays to the plot renderer for near-zero-latency updates.
+---
 
-### 2. Hardware Resource Monitor (`psutil` & `pynvml`/`torch`)
-**Purpose**: Ensure users know if their datasets or models are exceeding subsystem RAM/VRAM capacity.
-**Mechanics**:
-- A `QTimer` (`self.res_timer`) triggers every 1,000ms.
-- Calls `psutil.cpu_percent()` and `psutil.virtual_memory().percent` for CPU and Main Memory bottlenecks.
-- Measures allocated PyTorch tensor memory via `torch.cuda.memory_allocated()` falling back to N/A.
+## Real-Time Plots
 
-### 3. Open Neural Network Exchange (ONNX) Exporter
-**Purpose**: Allow models built visually with Neural Forge to be easily consumed by Python APIs, C++, or mobile deployments.
-**Mechanics**: 
-- Added `backend/exporter.py` implementing `export_to_onnx` which wraps `torch.onnx.export`.
-- Utilizes the `dummy_tensor` (input shape) from Phase 3's ghost run dynamically captured in `ProjectState`.
-- **Shape Safety**: The system now ensures the trace tensor correctly matches the model's input rather than its output.
-- Automatically handles dynamic batch sizes via `dynamic_axes={'input': {0: 'batch_size'}}`.
+`ui/plot_panel.py` wraps PyQtGraph in a reusable `PlotPanel` widget:
+
+- Always shows training and validation loss.
+- Shows validation accuracy and F1 only for classification tasks.
+- Maintains local epoch/loss/metric arrays.
+- Updates from `TrainingWorker.epoch_finished(epoch, train_loss, val_loss, metrics)`.
+
+`TrainingWindow.refresh_ui()` toggles the metrics plot when the user changes problem type earlier in the pipeline.
+
+---
+
+## Resource Monitor
+
+`ui/monitor_panel.py` is a `QLabel` with an internal `QTimer`.
+
+- Polls CPU with `psutil.cpu_percent()`.
+- Polls RAM with `psutil.virtual_memory().percent`.
+- Polls CUDA allocated memory with `torch.cuda.memory_allocated()` when CUDA is available.
+
+The monitor is intentionally lightweight and lives inside the training header.
+
+---
+
+## Final Evaluation Metrics
+
+After training, `TrainingWorker._evaluate_model(...)` emits `evaluation_finished(metrics)`.
+
+Classification metrics include:
+
+- Accuracy
+- Precision
+- Recall
+- F1 Score
+- ROC-AUC when computable
+
+Regression metrics include:
+
+- MSE
+- RMSE
+- MAE
+- R2 Score
+
+`TrainingWindow` renders these values in the hidden `Evaluation Metrics` panel once results arrive.
+
+---
+
+## Export
+
+`ui/window_export.py` owns deployment outputs:
+
+| Export | Implementation |
+|---|---|
+| Data pipeline | Calls `DataPipeline.save(path)` |
+| PyTorch model | Calls `torch.save(state.model.state_dict(), path)` |
+| ONNX model | Calls `backend.exporter.export_to_onnx(state.model, state.dummy_tensor, path)` |
+
+The export screen enables buttons only when the relevant state is ready.
+
+`backend/exporter.py` keeps ONNX logic outside the UI and uses the ghost-run input tensor as the trace input. Export uses dynamic batch axes and returns `(success, message)` instead of raising into the UI.
+
+---
 
 ## Validation
-- `tests/test_phase5.py` verifies the PyTorch computational graph -> ONNX file sink behaves predictably across shape matches and mismatches.
+
+`tests/test_phase5.py` covers successful export, shape mismatch handling, failure messages, CUDA export when available, and ONNX loadability when the `onnx` package is installed.

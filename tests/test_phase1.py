@@ -13,9 +13,7 @@ pure-logic tests.  The UI-level tests use a QApplication fixture.
 from __future__ import annotations
 
 import json
-import os
 import sys
-import tempfile
 from pathlib import Path
 
 import pytest
@@ -250,14 +248,14 @@ class TestModelBuilderWindow:
         finally:
             w._is_loading_blueprint = False
         w._update_output_layer() # manual update
-        
+
         arch = w.get_architecture()
         assert len(arch) == 2
         # First layer was the original output layer (forced to 1 initially, now unlocked and stays 1)
         assert arch[0]["neurons"] == 1
         # Second layer is now the output layer and forced to 1
         assert arch[1]["neurons"] == 1
-        
+
         # Test loading a blueprint with a hidden layer correctly retains properties
         w._clear_all_rows()
         w._is_loading_blueprint = True
@@ -267,7 +265,7 @@ class TestModelBuilderWindow:
         finally:
             w._is_loading_blueprint = False
         w._update_output_layer()
-        
+
         arch2 = w.get_architecture()
         assert arch2[0]["neurons"] == 128
         assert arch2[1]["neurons"] == 1 # forced

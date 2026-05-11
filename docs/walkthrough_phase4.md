@@ -24,8 +24,9 @@ prevent the application from freezing.
   `[0, C-1]` to prevent common PyTorch range errors.
 - Handles both Percentage Split and K-Fold CV logic inside the `run()` override.
 - Emits thread-safe signals:
-  - `epoch_finished` — carries `(epoch, train_loss, val_loss)` for charting
+  - `epoch_finished` — carries `(epoch, train_loss, val_loss, metrics)` for charting
   - `batch_progress` — drives the progress bar
+  - `evaluation_finished` — carries final evaluation metrics
   - `training_finished` — signals success or error
   - `log_message` — safely proxies print statements to the UI console
 
@@ -54,7 +55,7 @@ optimizers, keeping the registry completely decoupled from Qt.
   - `build_loss(name)` → `nn.Module` — consumed by `TrainingWorker`
   - `build_optimizer(name, parameters, lr)` → `optim.Optimizer` — consumed by `TrainingWorker`
 
-**Why a registry?**  
+**Why a registry?**
 Adding a new loss or optimizer in the future requires changing only one file
 (`training_config.py`); the UI and the worker pick it up automatically.
 
@@ -85,9 +86,10 @@ Defaults are imported directly from the registry so they stay in sync automatica
 - Log console, progress bar, start/stop controls.
 
 ### 6. Integration in `main.py`
-`PipelineController._open_training_window()` calls `train_win.refresh_ui()` every
-time the user navigates forward, ensuring the loss combo always reflects the current
-`state.problem_type`, the Model Summary tab displays the current architecture and parameter count, and the `PlotPanel` adapts to show/hide the validation metrics chart.
+`NeuralForgeApp._switch_tab(3)` calls `self.train_dash.refresh_ui()` every time
+the user navigates to training, ensuring the loss combo reflects the current
+`state.problem_type`, the Model Summary tab displays the current architecture and
+parameter count, and the `PlotPanel` adapts to show/hide the validation metrics chart.
 
 ### 7. Decoupled UI Components
 To keep `window_training.py` clean, several sub-panels have been extracted:
@@ -98,7 +100,7 @@ To keep `window_training.py` clean, several sub-panels have been extracted:
 
 ## Validation & Testing
 
-- `tests/test_phase4.py` — expanded test suite (~47 tests across 4 classes):
+- `tests/test_phase4.py` — expanded test suite across 4 classes:
   - **TestTrainingConfig** — registry getters, `build_loss`, `build_optimizer`, defaults
   - **TestProjectStateDefaults** — new `loss_fn_name` / `optimizer_name` fields
   - **TestTrainingWorker** — end-to-end runs, metrics calculations for classification, stop-flags, missing model error

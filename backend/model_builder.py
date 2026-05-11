@@ -9,8 +9,6 @@ This module never touches Qt — it is a pure PyTorch backend.
 
 from __future__ import annotations
 
-from typing import Any
-
 import torch
 import torch.nn as nn
 
@@ -203,7 +201,11 @@ def ghost_run(
     """
     try:
         model.eval()
-        dummy = torch.randn(batch_size, input_features)
+        first_module = next(iter(model.children()), None)
+        if isinstance(first_module, (nn.Conv1d, nn.LazyConv1d)):
+            dummy = torch.randn(batch_size, 1, input_features)
+        else:
+            dummy = torch.randn(batch_size, input_features)
 
         with torch.no_grad():
             output = model(dummy)
@@ -211,7 +213,7 @@ def ghost_run(
         out_shape = tuple(output.shape)
         return True, output, (
             f"Ghost run passed! "
-            f"Input: ({batch_size}, {input_features}) → "
+            f"Input: {tuple(dummy.shape)} → "
             f"Output: {out_shape}"
         )
 
@@ -230,10 +232,14 @@ def ghost_run_with_input(
     """
     try:
         model.eval()
-        dummy_input = torch.randn(batch_size, input_features)
+        first_module = next(iter(model.children()), None)
+        if isinstance(first_module, (nn.Conv1d, nn.LazyConv1d)):
+            dummy_input = torch.randn(batch_size, 1, input_features)
+        else:
+            dummy_input = torch.randn(batch_size, input_features)
         with torch.no_grad():
             output = model(dummy_input)
-        
+
         return True, dummy_input, (
             f"Ghost run passed! Input shape: {tuple(dummy_input.shape)} -> Output shape: {tuple(output.shape)}"
         )

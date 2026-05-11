@@ -1,121 +1,102 @@
-# 🧠 Neural Forge
+# Neural Forge
 
-> A dual-path desktop app for building, training, and monitoring neural networks — **No-Code** for beginners, **Developer Mode** for experienced users who bring their own PyTorch project.
+> A dual-path desktop app for building, training, monitoring, and exporting neural networks. The No-Code path is for visual model building; Developer Mode validates an imported PyTorch project structure for future code-first training integration.
 
-Built with **PyQt6** (dark-themed UI) and **PyTorch** (ML backend), following a decoupled architecture where the visual UI acts purely as a configuration generator and the ML engine operates independently from a standardised blueprint.
+Neural Forge is built with PyQt6 and PyTorch. The no-code workflow keeps the UI, project state, and backend ML logic decoupled: the UI produces a layer blueprint and training configuration, and the backend consumes those objects without depending on Qt.
 
 ---
 
-## Features (Current)
+## Features
 
-| Feature | Status |
+| Area | Current capability |
 |---|---|
-| Home Screen with No-Code + Developer Mode paths | ✅ |
-| Dark-themed pipeline (Data → Model → Training) | ✅ |
-| CSV loading with auto-detection of columns and NaN handling | ✅ |
-| 5-row data preview in a table view | ✅ |
-| Target column picker (defaults to last column) | ✅ |
-| Classification / Regression toggle | ✅ |
-| Train/Validation split (percentage or K-Fold CV) | ✅ |
-| Sequential layer builder (Linear, Conv1d, MaxPool1d, AvgPool1d, Flatten, BatchNorm1d, Dropout) | ✅ |
-| Dynamic add/remove layer rows | ✅ |
-| Blueprint save/load as JSON | ✅ |
-| Blueprint validation (10 rules) | ✅ |
-| Blueprint → `nn.Sequential` with LazyLinear auto-inference | ✅ |
-| Ghost Run (dummy tensor validation) | ✅ |
-| Multithreaded training with `QThread` | ✅ |
-| GPU/CPU/MPS hardware toggle | ✅ |
-| Real-time loss curve (pyqtgraph) | ✅ |
-| CPU/RAM/VRAM resource monitor | ✅ |
-| ONNX model export | ✅ |
-| Loss function selection (per problem type) | ✅ |
-| Optimizer selection (Adam, AdamW, SGD, RMSprop) | ✅ |
-| **Developer Mode** | |
-| Project import with folder picker | ✅ |
-| Project structure guide dialog (Don't show again) | ✅ |
-| `config.yaml` bridge (UI → scripts) | ✅ |
-| Code editor / training integration | 🔜 |
+| App shell | Home screen, persistent sidebar, dark/light theme toggle |
+| No-Code data flow | CSV/Parquet loading, profiling, cleaning, feature engineering, preprocessing pipeline export |
+| Model builder | Sequential layer builder, locked input/output context, JSON blueprint save/load, validation, ghost run |
+| Training | Background `QThread` training, percentage split or K-Fold CV, CPU/CUDA/MPS selector, live loss and classification metric plots |
+| Evaluation | Final classification/regression metrics after training |
+| Export | Preprocessing pipeline `.pkl`, PyTorch `.pt/.pth`, and ONNX `.onnx` export |
+| Developer Mode | Project structure guide, folder import, required/optional file checklist |
+
+Developer Mode currently validates project structure only. Direct code-editor and code-first training execution are intentionally left as future integration work.
 
 ---
 
-## Getting Started
+## Installation
 
-### Prerequisites
-
-- Python 3.10+
-- Conda (recommended)
-
-### Installation
-
-> *It is recommended to create an environment and activate it before running the application. (venv or conda)*
+Python 3.10+ is recommended. Create and activate a virtual environment first.
 
 ```bash
-# Clone the repository
 git clone https://github.com/Nawfel-9/neural-forge
 cd neural-forge
-
-# Install dependencies
 pip install -r requirements.txt
 ```
 
->*If using GPU, follow the instructions from https://pytorch.org/get-started/locally/* for installing pytorch*
+For GPU builds, install the PyTorch wheel that matches your hardware from the official PyTorch selector, then install the remaining requirements.
 
-### Running the Application
+---
+
+## Running
 
 ```bash
 python main.py
 ```
 
-### Running Tests
+---
+
+## Tests
 
 ```bash
-python -m pytest tests/ -v
+python -m pytest tests -q
 ```
 
-**Current test results: 127/127 passing** (28 Phase 1 + 24 Phase 2 + 28 Phase 3 + 47 Phase 4 + 7 Phase 5)
-
-> *Phase 4 and 5 counts include the expanded suite added alongside the Loss/Optimizer selection feature.*
+The tests require the dependencies in `requirements.txt`, including PyTorch and PyQt6. In headless environments, set `QT_QPA_PLATFORM=offscreen` before running UI tests.
 
 ---
 
 ## Project Structure
 
-```
-├── main.py                    # Entry point + PipelineController
-├── requirements.txt           # Dependencies
-│
-├── ui/                        # UI layer (PyQt6)
-│   ├── styles.py              # Dark theme (QPalette + QSS)
-│   ├── window_data.py         # Window 1: Data loading & preprocessing
-│   ├── window_model.py        # Window 2: Sequential model builder
-│   ├── window_project_guide.py # Dev Mode: onboarding / structure guide
-│   ├── layer_row.py           # Custom widget: one layer row
-│   └── data_table_view.py     # QTableView wrapper for DataFrames
-│
-├── backend/                   # ML backend (no Qt dependency)
-│   ├── data_handler.py        # CSV load, clean, split
-│   ├── model_builder.py       # Blueprint → nn.Sequential (Phase 3)
-│   └── exporter.py            # ONNX export (Phase 5)
-│
-├── workers/                   # Threading
-│   └── training_worker.py     # QThread + pyqtSignals (Phase 4)
-│
-├── utils/                     # Shared utilities
-│   ├── project_state.py       # ProjectState dataclass
-│   ├── blueprint_io.py        # JSON save/load
-│   └── validators.py          # Blueprint validation
-│
-├── tests/                     # Automated tests
-│   ├── test_phase1.py         # 28 tests
-│   ├── test_phase2.py         # 24 tests
-│   └── test_phase3.py         # 28 tests
-│
-└── docs/                      # Documentation
-    ├── architecture.md
-    ├── walkthrough_phase1.md
-    ├── walkthrough_phase2.md
-    ├── walkthrough_phase3.md
-    └── walkthrough_dev_mode.md
+```text
+neural-forge/
+├── main.py                      # App shell, navigation, Home, Developer Mode status page
+├── requirements.txt             # Runtime and test dependencies
+├── assets/
+│   └── logo.png
+├── backend/
+│   ├── data_handler.py          # Data loading, cleaning, preprocessing, splitting
+│   ├── exporter.py              # ONNX export helper
+│   ├── model_builder.py         # Blueprint to nn.Sequential + ghost run
+│   └── training_config.py       # Loss and optimizer registries
+├── docs/
+│   ├── architecture.md
+│   ├── walkthrough_dev_mode.md
+│   ├── walkthrough_phase1.md
+│   ├── walkthrough_phase2.md
+│   ├── walkthrough_phase3.md
+│   ├── walkthrough_phase4.md
+│   ├── walkthrough_phase5.md
+│   ├── walkthrough_preprocessing.md
+│   └── walkthrough_refinements.md
+├── tests/
+├── ui/
+│   ├── custom_toggle.py
+│   ├── data_table_view.py
+│   ├── layer_row.py
+│   ├── monitor_panel.py
+│   ├── plot_panel.py
+│   ├── styles.py
+│   ├── window_data.py
+│   ├── window_export.py
+│   ├── window_model.py
+│   ├── window_project_guide.py
+│   └── window_training.py
+├── utils/
+│   ├── blueprint_io.py
+│   ├── project_state.py
+│   └── validators.py
+└── workers/
+    ├── data_loader_worker.py
+    └── training_worker.py
 ```
 
 ---
@@ -124,47 +105,21 @@ python -m pytest tests/ -v
 
 | Document | Description |
 |---|---|
-| [Architecture](docs/architecture.md) | System design, directory layout, pipeline diagram, blueprint format, dependencies |
-| [Phase 1 Walkthrough](docs/walkthrough_phase1.md) | Layer builder UI, blueprint save/load, validation — every function explained |
-| [Phase 2 Walkthrough](docs/walkthrough_phase2.md) | Data loading, cleaning, splitting, table preview — every function explained |
-| [Phase 3 Walkthrough](docs/walkthrough_phase3.md) | Blueprint → nn.Sequential, LazyLinear, ghost run — every function explained |
-| [Phase 4 Walkthrough](docs/walkthrough_phase4.md) | Training worker, threading, hardware selection — every function explained |
-| [Phase 5 Walkthrough](docs/walkthrough_phase5.md) | ONNX export, visualization, monitoring — every function explained |
-| [Refinements Walkthrough](docs/walkthrough_refinements.md) | UI/UX improvements, robustness, and workflow polish — every function explained |
-| [Dev Mode Walkthrough](docs/walkthrough_dev_mode.md) | HomeWindow, ProjectGuideDialog, config.yaml bridge, dual-path architecture |
-
-
----
-
-## Development Progress
-
-### Phase 0: Planning & Architecture ✅
-Defined the 3-window pipeline architecture, chose the tech stack, established the blueprint format as the decoupling contract between UI and ML backend.
-
-### Phase 1: Sequential Builder UI & Save/Load ✅
-Built Window 2 (Model Builder) with a scrollable layer list, dynamic add/remove, JSON save/load, and 7-rule blueprint validation. Dark theme applied globally.
-
-### Phase 2: Data Pipeline & Validation ✅
-Built Window 1 (Data Loading) with CSV file loading, 5-row table preview, target column picker, classification/regression toggle, percentage/K-Fold split config, NaN cleaning (fill mean or drop rows), and a 5-step validation chain before proceeding. Wired up the 2-window pipeline with forward/backward navigation.
-
-### Phase 3: PyTorch Translation Engine ✅
-Built the translation engine (`model_builder.py`) that converts blueprints into `nn.Sequential` models using `LazyLinear`/`LazyConv1d`/`LazyBatchNorm1d` for auto-inferred dimensions. Ghost run validates architectures with a dummy forward pass. Added "Build & Test" button to Window 2.
-
-### Phase 4: Multithreading & Hardware Selection ✅
-Built `TrainingWorker(QThread)` for multithreaded non-blocking PyTorch training loops, a CPU/CUDA/MPS automatic detection interface, and UI elements integrated into a third window (`window_training.py`).
-
-### Phase 5: Visualization, Monitoring & Export ✅
-Integrated `pyqtgraph` for real-time live loss curves, a `QTimer`-driven `psutil` integration for subsystem resource monitoring, and a fully functional ONNX export bridge in `backend/exporter.py`.
+| [Architecture](docs/architecture.md) | Current app architecture, data flow, dependencies, and verification plan |
+| [Phase 1 Walkthrough](docs/walkthrough_phase1.md) | Layer builder, blueprint I/O, validation |
+| [Phase 2 Walkthrough](docs/walkthrough_phase2.md) | Data backend, async data worker, data UI |
+| [Phase 3 Walkthrough](docs/walkthrough_phase3.md) | Blueprint translation and ghost runs |
+| [Phase 4 Walkthrough](docs/walkthrough_phase4.md) | Training worker, hardware selection, loss/optimizer registry |
+| [Phase 5 Walkthrough](docs/walkthrough_phase5.md) | Plotting, monitoring, export |
+| [Developer Mode Walkthrough](docs/walkthrough_dev_mode.md) | Project guide dialog, folder import, checklist page |
+| [Refinements Walkthrough](docs/walkthrough_refinements.md) | Production polish and robustness updates |
 
 ---
 
 ## Architecture Highlights
 
-- **Decoupled design** — UI produces a standard blueprint (list of dicts), backend consumes it. Zero coupling.
-- **Training config registry** — `backend/training_config.py` is the single source of truth for losses and optimizers; UI and worker both consume it.
-- **Foolproof fallbacks** — Every user interaction wrapped in `try/except` with friendly `QMessageBox` dialogs.
-- **Thread-safe** — Training runs on `QThread` with `pyqtSignal` (Phase 4), never on the main GUI thread.
-- **Dark theme** — Comprehensive QSS + QPalette styling defined once in `styles.py`.
-- **Tested** — 127 automated tests across 5 phases, covering logic, I/O, validation, model building, UI widgets, training config, and ONNX export.
-
----
+- **Decoupled backend**: backend modules do not import Qt.
+- **Shared project state**: `ProjectState` carries data, blueprint, model, training settings, and Developer Mode import state across screens.
+- **Registry-driven training config**: losses and optimizers live in `backend/training_config.py`.
+- **Threaded long-running work**: data operations use `DataLoaderWorker`; model training uses `TrainingWorker`.
+- **Export-ready outputs**: the final app can export preprocessing and model artifacts without coupling export logic to the UI.

@@ -1,462 +1,390 @@
-"""
-window_data.py
-==============
-Window 1 — Data Loading & Preprocessing.
-
-Lets the user:
-  • Load a CSV file
-  • Preview the first 5 rows
-  • Pick the target column (defaults to last)
-  • Choose problem type (Classification / Regression)
-  • Configure train/validation split (percentage or k-fold)
-  • Clean NaN values
-  • Proceed to Window 2 (Model Builder)
-"""
-
 from __future__ import annotations
-
-import os
-from typing import Optional
-
-from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import (
-    QButtonGroup,
-    QComboBox,
-    QDoubleSpinBox,
-    QFileDialog,
-    QFrame,
-    QGroupBox,
-    QHBoxLayout,
-    QLabel,
-    QMainWindow,
-    QMessageBox,
-    QPushButton,
-    QRadioButton,
-    QScrollArea,
-    QSizePolicy,
-    QSpinBox,
-    QVBoxLayout,
-    QWidget,
-)
-
 from PyQt6.QtCore import Qt, QThread
-from workers.data_loader_worker import DataLoaderWorker
+from PyQt6.QtWidgets import (
+    QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QFileDialog,
+    QGroupBox, QComboBox, QDoubleSpinBox, QSpinBox, QCheckBox, QListWidget,
+    QListWidgetItem, QProgressBar, QMessageBox, QScrollArea, QFormLayout
+)
 from ui.data_table_view import DataPreviewTable
 from utils.project_state import ProjectState
+from workers.data_loader_worker import DataLoaderWorker
 
-class DataWindow(QMainWindow):
+class DataWindow(QWidget):
     """
-    Window 1 of the pipeline — data loading and preprocessing.
-
-    Parameters
-    ----------
-    project_state : ProjectState
-        Shared state, written to when the user clicks "Next".
-    on_next : callable | None
-        Callback invoked after successful validation to open Window 2.
+    Exhaustive Data Engineering Dashboard (Scrollable).
     """
-
-    def __init__(
-        self,
-        project_state: ProjectState,
-        on_next=None,
-        parent: QWidget | None = None,
-    ) -> None:
+    def __init__(self, project_state: ProjectState, on_next=None, parent=None) -> None:
         super().__init__(parent)
         self.state = project_state
         self._on_next_callback = on_next
-        self._raw_df = None  # keeps original before cleaning
-        self._cleaned_df = None
-        self._worker_thread = None
-        self._worker = None
+        self.df = None
+        self.profile_df = None
+        self.pipeline = None
+        self._active_threads = []
+        self._active_workers = []
+        self._init_ui()
 
-        self._init_window()
-        self._build_ui()
+    def _init_ui(self):
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
 
-    # ── Window setup ────────────────────────────────────────────────────────
-    def _init_window(self) -> None:
-        self.setWindowTitle("Neural Network Builder — Data Loading")
-        self.setMinimumSize(860, 620)
-        self.resize(940, 700)
+        # Scroll Area
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.Shape.NoFrame)
 
-    # ── UI construction ─────────────────────────────────────────────────────
-    def _build_ui(self) -> None:
-        central = QWidget()
-        self.setCentralWidget(central)
-        root = QVBoxLayout(central)
-        root.setContentsMargins(20, 20, 20, 20)
-        root.setSpacing(14)
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(32, 32, 32, 32)
+        layout.setSpacing(24)
 
-        # ── Header ──────────────────────────────────────────────────────────
-        header = QLabel("📊  Data Loading & Preprocessing")
-        header.setStyleSheet("font-size: 20px; font-weight: 700;")
-        root.addWidget(header)
+        # Header
+        header_layout = QVBoxLayout()
+        title = QLabel("Data Engineering Lab")
+        title.setProperty("class", "PageTitle")
+        subtitle = QLabel("Ingest, clean, and preprocess your dataset for deep learning.")
+        subtitle.setProperty("class", "PageSubtitle")
+        header_layout.addWidget(title)
+        header_layout.addWidget(subtitle)
+        layout.addLayout(header_layout)
 
-        # ── Load CSV row ────────────────────────────────────────────────────
-        load_row = QHBoxLayout()
-        self.btn_load = QPushButton("📂  Load CSV")
-        self.btn_load.setProperty("class", "primary")
-        self.btn_load.setMinimumHeight(36)
-        self.btn_load.clicked.connect(self._load_csv)
-        load_row.addWidget(self.btn_load)
+        # Progress
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setVisible(False)
+        self.progress_bar.setFixedHeight(6)
+        layout.addWidget(self.progress_bar)
 
-        self.lbl_file = QLabel("No file loaded")
-        self.lbl_file.setStyleSheet("color: #8b949e;")
-        load_row.addWidget(self.lbl_file, stretch=1)
-        root.addLayout(load_row)
+        self.lbl_status = QLabel("Ready")
+        self.lbl_status.setStyleSheet("color: #64748B; font-size: 9pt;")
+        layout.addWidget(self.lbl_status)
 
-        # ── Data info bar ───────────────────────────────────────────────────
-        self.lbl_info = QLabel("")
-        self.lbl_info.setStyleSheet("color: #8b949e; font-size: 12px;")
-        root.addWidget(self.lbl_info)
+        # Grid-like layout using QHBoxLayout for cards
+        row1 = QHBoxLayout()
+        row1.addWidget(self._build_ingestion_card())
+        row1.addWidget(self._build_target_card())
+        layout.addLayout(row1)
 
-        # ── Table preview ───────────────────────────────────────────────────
-        self.preview = DataPreviewTable(max_preview_rows=5)
-        self.preview.setMinimumHeight(160)
-        root.addWidget(self.preview, stretch=1)
+        layout.addWidget(self._build_data_preview_card())
 
-        # ── Configuration panels (side by side) ─────────────────────────────
-        config_row = QHBoxLayout()
-        config_row.setSpacing(14)
+        layout.addWidget(self._build_profile_card())
 
-        # Left: Target column + Problem type
-        config_row.addWidget(self._build_target_panel())
+        row2 = QHBoxLayout()
+        row2.addWidget(self._build_cleaning_card())
+        row2.addWidget(self._build_scaling_card())
+        layout.addLayout(row2)
 
-        # Right: Split config + NaN handling
-        config_row.addWidget(self._build_split_panel())
+        layout.addWidget(self._build_engineering_card())
 
-        root.addLayout(config_row)
+        # Bottom Actions
+        bottom_row = QHBoxLayout()
+        bottom_row.addStretch()
+        self.btn_apply_all = QPushButton("Apply Full Preprocessing Pipeline")
+        self.btn_apply_all.setProperty("class", "primary")
+        self.btn_apply_all.setMinimumSize(300, 44)
+        self.btn_apply_all.clicked.connect(self._apply_preprocessing)
+        bottom_row.addWidget(self.btn_apply_all)
 
-        # ── Bottom button bar ───────────────────────────────────────────────
-        btn_bar = QHBoxLayout()
-        btn_bar.addStretch()
-
-        self.btn_next = QPushButton("Next  →  Model Builder")
-        self.btn_next.setProperty("class", "primary")
-        self.btn_next.setMinimumHeight(40)
-        self.btn_next.setMinimumWidth(220)
+        self.btn_next = QPushButton("Proceed to Model Builder →")
+        self.btn_next.setMinimumSize(250, 44)
         self.btn_next.setEnabled(False)
         self.btn_next.clicked.connect(self._on_next)
-        btn_bar.addWidget(self.btn_next)
+        bottom_row.addWidget(self.btn_next)
 
-        root.addLayout(btn_bar)
+        layout.addLayout(bottom_row)
 
-        # ── Status bar ──────────────────────────────────────────────────────
-        self.statusBar().showMessage("Ready")
+        scroll.setWidget(container)
+        main_layout.addWidget(scroll)
 
-    # ── Target + problem type panel ─────────────────────────────────────────
-    def _build_target_panel(self) -> QGroupBox:
-        group = QGroupBox("Target & Problem Type")
+    # ── Cards ────────────────────────────────────────────────────────
+
+    def _build_ingestion_card(self) -> QGroupBox:
+        group = QGroupBox("1. Data Ingestion")
         lay = QVBoxLayout(group)
 
-        # Target column selector
-        row1 = QHBoxLayout()
-        row1.addWidget(QLabel("Target column:"))
+        btn_load = QPushButton("📂 Load CSV / Parquet")
+        btn_load.clicked.connect(self._load_data)
+        lay.addWidget(btn_load)
+
+        self.lbl_file_info = QLabel("No file loaded.")
+        self.lbl_file_info.setWordWrap(True)
+        lay.addWidget(self.lbl_file_info)
+        lay.addStretch()
+        return group
+
+    def _build_target_card(self) -> QGroupBox:
+        group = QGroupBox("2. Problem Definition")
+        lay = QFormLayout(group)
+        lay.setSpacing(12)
+
         self.combo_target = QComboBox()
-        self.combo_target.setMinimumWidth(160)
-        self.combo_target.setEnabled(False)
-        row1.addWidget(self.combo_target, stretch=1)
-        lay.addLayout(row1)
+        lay.addRow("Target Column:", self.combo_target)
 
-        # Problem type radio buttons
-        lay.addSpacing(6)
-        lay.addWidget(QLabel("Problem type:"))
-        radio_row = QHBoxLayout()
-        self.radio_classification = QRadioButton("Classification")
-        self.radio_regression = QRadioButton("Regression")
-        self.radio_classification.setChecked(True)
-        self.btn_group_problem = QButtonGroup(self)
-        self.btn_group_problem.addButton(self.radio_classification)
-        self.btn_group_problem.addButton(self.radio_regression)
-        radio_row.addWidget(self.radio_classification)
-        radio_row.addWidget(self.radio_regression)
-        radio_row.addStretch()
-        lay.addLayout(radio_row)
-        lay.addStretch()
+        self.combo_problem_type = QComboBox()
+        self.combo_problem_type.addItems(["classification", "regression"])
+        lay.addRow("Problem Type:", self.combo_problem_type)
         return group
 
-    # ── Split config + NaN panel ────────────────────────────────────────────
-    def _build_split_panel(self) -> QGroupBox:
-        group = QGroupBox("Split & Cleaning")
+    def _build_data_preview_card(self) -> QGroupBox:
+        group = QGroupBox("Raw Data Preview")
+        lay = QVBoxLayout(group)
+        self.raw_data_table = DataPreviewTable()
+        self.raw_data_table.setMinimumHeight(200)
+        lay.addWidget(self.raw_data_table)
+        return group
+
+    def _build_profile_card(self) -> QGroupBox:
+        group = QGroupBox("Dataset Profile")
+        lay = QVBoxLayout(group)
+        self.profile_table = DataPreviewTable()
+        self.profile_table.setMinimumHeight(200)
+        lay.addWidget(self.profile_table)
+        return group
+
+    def _build_cleaning_card(self) -> QGroupBox:
+        group = QGroupBox("3. Cleaning & Outliers")
         lay = QVBoxLayout(group)
 
-        # Split method radio buttons
-        lay.addWidget(QLabel("Split method:"))
-        split_row = QHBoxLayout()
-        self.radio_percentage = QRadioButton("Percentage")
-        self.radio_kfold = QRadioButton("K-Fold CV")
-        self.radio_percentage.setChecked(True)
-        self.btn_group_split = QButtonGroup(self)
-        self.btn_group_split.addButton(self.radio_percentage)
-        self.btn_group_split.addButton(self.radio_kfold)
-        self.radio_percentage.toggled.connect(self._on_split_method_changed)
-        split_row.addWidget(self.radio_percentage)
-        split_row.addWidget(self.radio_kfold)
-        split_row.addStretch()
-        lay.addLayout(split_row)
-
-        # Percentage ratio spinner
-        pct_row = QHBoxLayout()
-        self.lbl_ratio = QLabel("Train ratio:")
-        pct_row.addWidget(self.lbl_ratio)
-        self.spin_ratio = QDoubleSpinBox()
-        self.spin_ratio.setRange(0.5, 0.95)
-        self.spin_ratio.setSingleStep(0.05)
-        self.spin_ratio.setValue(0.8)
-        self.spin_ratio.setFixedWidth(80)
-        pct_row.addWidget(self.spin_ratio)
-        pct_row.addStretch()
-        lay.addLayout(pct_row)
-
-        # K-fold spinner
-        kfold_row = QHBoxLayout()
-        self.lbl_k = QLabel("K folds:")
-        kfold_row.addWidget(self.lbl_k)
-        self.spin_k = QSpinBox()
-        self.spin_k.setRange(2, 20)
-        self.spin_k.setValue(5)
-        self.spin_k.setFixedWidth(80)
-        kfold_row.addWidget(self.spin_k)
-        kfold_row.addStretch()
-        lay.addLayout(kfold_row)
-
-        # NaN handling
-        lay.addSpacing(6)
-        nan_row = QHBoxLayout()
-        nan_row.addWidget(QLabel("NaN handling:"))
+        form = QFormLayout()
         self.combo_nan = QComboBox()
-        self.combo_nan.addItems(["Fill with mean / mode", "Drop rows with NaN"])
-        self.combo_nan.setMinimumWidth(180)
-        nan_row.addWidget(self.combo_nan, stretch=1)
-        lay.addLayout(nan_row)
+        self.combo_nan.addItems(["drop", "mean", "median", "mode", "knn"])
+        form.addRow("NaN Strategy:", self.combo_nan)
 
-        # Clean button
-        self.btn_clean = QPushButton("🧹  Clean Data")
-        self.btn_clean.setEnabled(False)
-        self.btn_clean.clicked.connect(self._clean_data)
-        lay.addWidget(self.btn_clean)
+        self.combo_out_method = QComboBox()
+        self.combo_out_method.addItems(["iqr", "z-score"])
+        form.addRow("Outlier Method:", self.combo_out_method)
 
-        lay.addStretch()
+        self.combo_out_action = QComboBox()
+        self.combo_out_action.addItems(["clip", "remove"])
+        form.addRow("Outlier Action:", self.combo_out_action)
+        lay.addLayout(form)
 
-        # Set initial visibility
-        self._on_split_method_changed()
+        lay.addWidget(QLabel("Apply to Columns:"))
+        self.list_out_cols = QListWidget()
+        self.list_out_cols.setMaximumHeight(100)
+        lay.addWidget(self.list_out_cols)
 
+        btn_clean = QPushButton("Apply Cleaning")
+        btn_clean.clicked.connect(self._apply_cleaning)
+        lay.addWidget(btn_clean)
         return group
 
-    # ── Split method toggle ─────────────────────────────────────────────────
-    def _on_split_method_changed(self) -> None:
-        is_pct = self.radio_percentage.isChecked()
-        self.lbl_ratio.setVisible(is_pct)
-        self.spin_ratio.setVisible(is_pct)
-        self.lbl_k.setVisible(not is_pct)
-        self.spin_k.setVisible(not is_pct)
+    def _build_scaling_card(self) -> QGroupBox:
+        group = QGroupBox("4. Features & Scaling")
+        lay = QVBoxLayout(group)
 
-    # ── CSV loading ─────────────────────────────────────────────────────────
-    def _load_csv(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(
-            self,
-            "Select CSV File",
-            "",
-            "CSV Files (*.csv);;TSV Files (*.tsv);;All Files (*)",
-        )
-        if not path:
-            return
+        form = QFormLayout()
+        self.combo_scaling = QComboBox()
+        self.combo_scaling.addItems(["standard", "minmax"])
+        form.addRow("Scaling Method:", self.combo_scaling)
 
-        self._start_worker("load", filepath=path)
+        self.check_pca = QCheckBox("Enable PCA")
+        self.spin_pca = QDoubleSpinBox()
+        self.spin_pca.setRange(0.5, 0.99)
+        self.spin_pca.setValue(0.95)
+        form.addRow(self.check_pca, self.spin_pca)
+        lay.addLayout(form)
 
-    def _on_load_finished(self, df: pd.DataFrame, _) -> None:
-        self._raw_df = df
-        self._cleaned_df = None
+        lay.addWidget(QLabel("Include Features:"))
+        self.list_features = QListWidget()
+        self.list_features.setMaximumHeight(100)
+        lay.addWidget(self.list_features)
+        return group
 
-        # Update file label
-        fname = "Loaded Data" # placeholder if path not stored, let's refine
-        self.lbl_file.setText(f"✅  Data Loaded")
-        self.lbl_file.setStyleSheet("color: #3fb950;")
+    def _build_engineering_card(self) -> QGroupBox:
+        group = QGroupBox("5. Advanced Feature Engineering")
+        lay = QHBoxLayout(group)
 
-        # Show info
-        self.lbl_info.setText(
-            f"{df.shape[0]} rows × {df.shape[1]} columns  •  "
-            f"NaN cells: {int(df.isna().sum().sum())}"
-        )
+        # Interactions
+        fi_lay = QFormLayout()
+        self.combo_fi_col1 = QComboBox()
+        self.combo_fi_op = QComboBox()
+        self.combo_fi_op.addItems(["add", "sub", "mul", "div"])
+        self.combo_fi_col2 = QComboBox()
 
-        # Populate preview
-        self.preview.set_dataframe(df)
+        fi_lay.addRow("Col A:", self.combo_fi_col1)
+        fi_lay.addRow("Operator:", self.combo_fi_op)
+        fi_lay.addRow("Col B:", self.combo_fi_col2)
 
-        # Populate target column dropdown
-        from backend.data_handler import detect_columns
-        columns = detect_columns(df)
-        self.combo_target.clear()
-        self.combo_target.addItems(columns)
-        self.combo_target.setCurrentIndex(len(columns) - 1)
-        self.combo_target.setEnabled(True)
+        btn_fi = QPushButton("Create Interaction")
+        btn_fi.clicked.connect(self._create_interaction)
+        fi_lay.addRow("", btn_fi)
 
-        self.btn_clean.setEnabled(True)
-        self.btn_next.setEnabled(True)
-        self.statusBar().showMessage("Data loaded successfully.", 3000)
+        lay.addLayout(fi_lay)
+        lay.addSpacing(20)
 
-    # ── Data cleaning ───────────────────────────────────────────────────────
-    def _clean_data(self) -> None:
-        if self._raw_df is None:
-            QMessageBox.warning(self, "No Data", "Load a CSV file first.")
-            return
+        # Time Series
+        ts_lay = QVBoxLayout()
+        form_ts = QFormLayout()
+        self.spin_lags = QSpinBox()
+        self.spin_lags.setRange(0, 10)
+        form_ts.addRow("Lags (t-n):", self.spin_lags)
+        ts_lay.addLayout(form_ts)
 
-        from backend.data_handler import NaNStrategy
-        strategy = (
-            NaNStrategy.FILL_MEAN
-            if self.combo_nan.currentIndex() == 0
-            else NaNStrategy.DROP_ROWS
-        )
-        self._start_worker("clean", df=self._raw_df, strategy=strategy)
+        ts_lay.addWidget(QLabel("Lag Columns:"))
+        self.list_ts_cols = QListWidget()
+        self.list_ts_cols.setMaximumHeight(80)
+        ts_lay.addWidget(self.list_ts_cols)
 
-    def _on_clean_finished(self, cleaned: pd.DataFrame, report: dict) -> None:
-        self._cleaned_df = cleaned
+        btn_ts = QPushButton("Apply Lags")
+        btn_ts.clicked.connect(self._apply_engineering)
+        ts_lay.addWidget(btn_ts)
 
-        # Refresh preview & info
-        self.preview.set_dataframe(cleaned)
-        self.lbl_info.setText(
-            f"{cleaned.shape[0]} rows × {cleaned.shape[1]} columns  •  "
-            f"NaN cells: {report['nan_count_after']}  •  "
-            f"Strategy: {report['strategy_used']}  •  "
-            f"Rows removed: {report['rows_before'] - report['rows_after']}"
-        )
+        lay.addLayout(ts_lay)
+        lay.addSpacing(20)
 
-        QMessageBox.information(
-            self,
-            "Data Cleaned ✅",
-            f"NaN before: {report['nan_count_before']}\n"
-            f"NaN after:  {report['nan_count_after']}\n"
-            f"Rows: {report['rows_before']} → {report['rows_after']}\n"
-            f"Strategy: {report['strategy_used']}",
-        )
-        self.statusBar().showMessage("Data cleaned.", 3000)
+        # Datetime Parsing
+        dt_lay = QVBoxLayout()
+        dt_lay.addWidget(QLabel("Date/Time Columns:"))
+        self.list_dt_cols = QListWidget()
+        self.list_dt_cols.setMaximumHeight(80)
+        dt_lay.addWidget(self.list_dt_cols)
 
-    # ── Worker Management ───────────────────────────────────────────────────
+        btn_dt = QPushButton("Extract Date Features")
+        btn_dt.clicked.connect(self._apply_datetime)
+        dt_lay.addWidget(btn_dt)
+
+        lay.addLayout(dt_lay)
+        return group
+
+
+    # ── Logic ────────────────────────────────────────────────────────
+
     def _start_worker(self, task: str, **kwargs):
-        self.setCursor(Qt.CursorShape.WaitCursor)
-        self.btn_load.setEnabled(False)
-        self.btn_clean.setEnabled(False)
+        self.progress_bar.setRange(0, 0)
+        self.progress_bar.setVisible(True)
         self.btn_next.setEnabled(False)
+        self.lbl_status.setText(f"Processing: {task}...")
 
-        self._worker_thread = QThread()
-        self._worker = DataLoaderWorker(task, **kwargs)
-        self._worker.moveToThread(self._worker_thread)
+        thread = QThread()
+        worker = DataLoaderWorker(task, **kwargs)
+        worker.moveToThread(thread)
 
-        self._worker_thread.started.connect(self._worker.run)
-        self._worker.progress.connect(lambda msg: self.statusBar().showMessage(msg))
-        self._worker.error.connect(self._on_worker_error)
+        self._active_threads.append(thread)
+        self._active_workers.append(worker)
 
-        if task == "load":
-            self._worker.finished.connect(self._on_load_finished)
-        else:
-            self._worker.finished.connect(self._on_clean_finished)
-
-        self._worker.finished.connect(self._cleanup_worker)
-        self._worker.error.connect(self._cleanup_worker)
-
-        self._worker_thread.start()
+        thread.started.connect(worker.run)
+        worker.progress.connect(self.lbl_status.setText)
+        worker.error.connect(self._on_worker_error)
+        worker.finished.connect(lambda res, rep, t=task: self._on_worker_finished(res, rep, t))
+        worker.finished.connect(lambda: self._cleanup_task(thread, worker))
+        worker.error.connect(lambda: self._cleanup_task(thread, worker))
+        thread.start()
 
     def _on_worker_error(self, msg: str):
-        QMessageBox.critical(self, "Error", f"Operation failed:\n{msg}")
-        self.statusBar().showMessage("Error occurred.")
+        self.progress_bar.setVisible(False)
+        self.lbl_status.setText("Error")
+        QMessageBox.critical(self, "Error", msg)
 
-    def _cleanup_worker(self):
-        self.setCursor(Qt.CursorShape.ArrowCursor)
-        self.btn_load.setEnabled(True)
-        if self._raw_df is not None:
-            self.btn_clean.setEnabled(True)
+    def _on_worker_finished(self, result, report, task: str):
+        self.progress_bar.setVisible(False)
+        self.lbl_status.setText("Ready")
+
+        if task == "load":
+            self.df = result
+            self.lbl_file_info.setText(f"Loaded: {report['path']}\nRows: {len(self.df)}")
+            self.raw_data_table.set_dataframe(self.df.head(100))
+            self._start_worker("profile", df=self.df)
+        elif task == "profile":
+            self.profile_df = result
+            self.profile_table.set_dataframe(self.profile_df)
+            self._update_column_lists()
+            if self.state.pipeline is not None:
+                self.btn_next.setEnabled(True)
+        elif task == "clean":
+            self.df = result
+            self.raw_data_table.set_dataframe(self.df.head(100))
+            self._start_worker("profile", df=self.df)
+        elif task == "engineer":
+            self.df = result
+            self.raw_data_table.set_dataframe(self.df.head(100))
+            self._start_worker("profile", df=self.df)
+        elif task == "interaction":
+            self.df = result
+            self.raw_data_table.set_dataframe(self.df.head(100))
+            self._start_worker("profile", df=self.df)
+        elif task == "preprocess":
+            self.df = result
+            self.raw_data_table.set_dataframe(self.df.head(100))
+            self.state.dataframe = self.df
+            self.state.target_column = self.combo_target.currentText()
+            self.state.problem_type = self.combo_problem_type.currentText()
+            self.state.pipeline = report.get("pipeline")
             self.btn_next.setEnabled(True)
-        
-        if self._worker_thread:
-            self._worker_thread.quit()
-            self._worker_thread.wait()
+            QMessageBox.information(self, "Success", "Data preprocessing applied! You can now proceed to Model Builder.")
+            self._start_worker("profile", df=self.df)
 
-    # ── Next → ──────────────────────────────────────────────────────────────
-    def _on_next(self) -> None:
-        """Validate, sync to ProjectState, and open Window 2."""
-        try:
-            # Determine which DataFrame to use
-            df = self._cleaned_df if self._cleaned_df is not None else self._raw_df
-            if df is None:
-                QMessageBox.warning(self, "No Data", "Please load a CSV file first.")
-                return
+    def _cleanup_task(self, thread, worker):
+        if thread in self._active_threads: self._active_threads.remove(thread)
+        if worker in self._active_workers: self._active_workers.remove(worker)
+        thread.quit()
+        thread.deleteLater()
+        worker.deleteLater()
 
-            # Check for remaining NaNs
-            nan_count = int(df.isna().sum().sum())
-            if nan_count > 0:
-                reply = QMessageBox.question(
-                    self,
-                    "Data Contains NaN Values",
-                    f"The dataset still has {nan_count} missing value(s).\n\n"
-                    "Would you like to auto-fill them with column means/modes?\n\n"
-                    "Click 'Yes' to auto-clean, or 'No' to go back and configure cleaning.",
-                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                )
-                if reply == QMessageBox.StandardButton.Yes:
-                    from backend.data_handler import NaNStrategy, clean_dataframe
-                    df, _ = clean_dataframe(df, NaNStrategy.FILL_MEAN)
-                    self._cleaned_df = df
-                    self.preview.set_dataframe(df)
-                else:
-                    return
+    def _update_column_lists(self):
+        cols = list(self.df.columns)
+        previous_target = self.state.target_column or self.combo_target.currentText()
+        self.combo_target.clear()
+        self.combo_target.addItems(cols)
+        if previous_target in cols:
+            self.combo_target.setCurrentText(previous_target)
+        elif cols:
+            self.combo_target.setCurrentIndex(len(cols) - 1)
+        self.combo_fi_col1.clear()
+        self.combo_fi_col1.addItems(cols)
+        self.combo_fi_col2.clear()
+        self.combo_fi_col2.addItems(cols)
 
-            # Target column
-            target = self.combo_target.currentText()
-            if not target or target not in df.columns:
-                QMessageBox.warning(
-                    self,
-                    "Invalid Target",
-                    "Please select a valid target column.",
-                )
-                return
+        for lst in [self.list_out_cols, self.list_ts_cols, self.list_features, self.list_dt_cols]:
+            lst.clear()
+            for col in cols:
+                item = QListWidgetItem(col)
+                item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+                item.setCheckState(Qt.CheckState.Checked)
+                lst.addItem(item)
 
-            # Feature count check
-            from backend.data_handler import count_input_features
-            n_features = count_input_features(df, target)
-            if n_features == 0:
-                QMessageBox.warning(
-                    self,
-                    "No Features",
-                    "The dataset has no input features (only the target column).",
-                )
-                return
+    # ── Actions ──
 
-            # Problem type
-            problem_type = (
-                "classification"
-                if self.radio_classification.isChecked()
-                else "regression"
-            )
+    def _load_data(self):
+        path, _ = QFileDialog.getOpenFileName(self, "Load Data", "", "Data Files (*.csv *.parquet)")
+        if path:
+            self._start_worker("load", filepath=path)
 
-            # Split config
-            if self.radio_percentage.isChecked():
-                split_config = {
-                    "method": "percentage",
-                    "ratio": self.spin_ratio.value(),
-                }
-            else:
-                split_config = {
-                    "method": "kfold",
-                    "k": self.spin_k.value(),
-                }
+    def _apply_cleaning(self):
+        if self.df is None: return
+        out_cols = [self.list_out_cols.item(i).text() for i in range(self.list_out_cols.count()) if self.list_out_cols.item(i).checkState() == Qt.CheckState.Checked]
+        self._start_worker("clean", df=self.df, strategy=self.combo_nan.currentText(), outlier_cols=out_cols, outlier_method=self.combo_out_method.currentText(), outlier_action=self.combo_out_action.currentText())
 
-            # ── Write to shared state ───────────────────────────────────────
-            self.state.dataframe = df
-            self.state.target_column = target
-            self.state.problem_type = problem_type
-            self.state.split_config = split_config
+    def _create_interaction(self):
+        if self.df is None: return
+        self._start_worker("interaction", df=self.df, col1=self.combo_fi_col1.currentText(), col2=self.combo_fi_col2.currentText(), op=self.combo_fi_op.currentText())
 
-            # Open Window 2
-            if self._on_next_callback:
-                self._on_next_callback()
+    def _apply_engineering(self):
+        if self.df is None: return
+        ts_cols = [self.list_ts_cols.item(i).text() for i in range(self.list_ts_cols.count()) if self.list_ts_cols.item(i).checkState() == Qt.CheckState.Checked]
+        self._start_worker("engineer", df=self.df, cyclical_cols=[], lag_cols=ts_cols, n_lags=self.spin_lags.value())
 
-        except Exception as exc:
-            QMessageBox.critical(
-                self,
-                "Error",
-                f"An unexpected error occurred.\n\n{type(exc).__name__}: {exc}",
-            )
+    def _apply_datetime(self):
+        if self.df is None: return
+        dt_cols = [self.list_dt_cols.item(i).text() for i in range(self.list_dt_cols.count()) if self.list_dt_cols.item(i).checkState() == Qt.CheckState.Checked]
+        if not dt_cols: return
+        self._start_worker("engineer", df=self.df, datetime_cols=dt_cols)
 
-    # ── Public API ──────────────────────────────────────────────────────────
-    def get_current_dataframe(self) -> Optional["pd.DataFrame"]:
-        """Return the cleaned DataFrame if available, else the raw one."""
-        return self._cleaned_df if self._cleaned_df is not None else self._raw_df
+    def _apply_preprocessing(self):
+        if self.df is None: return
+        target = self.combo_target.currentText()
+        excluded = [self.list_features.item(i).text() for i in range(self.list_features.count()) if self.list_features.item(i).checkState() == Qt.CheckState.Unchecked]
+        config = {
+            'scaling': self.combo_scaling.currentText(),
+            'exclude_columns': excluded,
+            'power_transform_columns': [],
+            'pca_enabled': self.check_pca.isChecked(),
+            'pca_components': self.spin_pca.value()
+        }
+        self._start_worker("preprocess", df=self.df, target=target, config=config)
+
+    def _on_next(self):
+        self.state.target_column = self.combo_target.currentText()
+        self.state.problem_type = self.combo_problem_type.currentText()
+        if self._on_next_callback:
+            self._on_next_callback()

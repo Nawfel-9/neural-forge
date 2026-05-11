@@ -6,7 +6,7 @@ Post-Phase 5, we focused on transforming the "Neural Forge" prototype into a pro
 ## Key Improvements
 
 ### 1. Asynchronous Data Engine (`DataLoaderWorker`)
-**Problem**: Large CSV files (100k+ rows) caused the UI thread to hang during `pd.read_csv` and `clean_dataframe` calls, leading to "Not Responding" errors.
+**Problem**: Large CSV files (100k+ rows) caused the UI thread to hang during `pd.read_csv` and preprocessing calls, leading to "Not Responding" errors.
 **Solution**:
 - Implemented `workers/data_loader_worker.py` using `QThread`.
 - **Non-Blocking I/O**: The `DataWindow` now offloads all heavy Pandas operations to this background worker.
@@ -15,7 +15,7 @@ Post-Phase 5, we focused on transforming the "Neural Forge" prototype into a pro
 ### 2. Unified Interface Architecture (`QStackedWidget`)
 **Problem**: The previous version relied on manual `hide()` and `show()` calls between different windows, which felt disjointed and reset window positions.
 **Solution**:
-- Refactored `main.py` to use a central `QStackedWidget` controlled by `PipelineController`.
+- Refactored `main.py` to use a central `QStackedWidget` controlled by `NeuralForgeApp`.
 - **State Synchronization**: Integrated `refresh_data_info()` and `refresh_ui()` hooks that trigger automatically upon page switching, ensuring the Model Builder and Training Studio always have the latest dataset context.
 
 ### 3. Automatic Label Encoding & Validation

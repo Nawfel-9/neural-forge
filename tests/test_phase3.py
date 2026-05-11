@@ -12,9 +12,10 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-import torch
-import torch.nn as nn
 import pytest
+
+torch = pytest.importorskip("torch")
+nn = pytest.importorskip("torch.nn")
 
 ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:

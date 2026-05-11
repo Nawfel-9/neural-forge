@@ -8,12 +8,11 @@ from __future__ import annotations
 
 import torch
 import torch.nn as nn
-from typing import Any
 
 def export_to_onnx(model: nn.Module, dummy_tensor: torch.Tensor, filepath: str) -> tuple[bool, str]:
     """
     Export a PyTorch model to ONNX format.
-    
+
     Parameters
     ----------
     model : nn.Module
@@ -22,7 +21,7 @@ def export_to_onnx(model: nn.Module, dummy_tensor: torch.Tensor, filepath: str) 
         A tensor matching the input shape of the model.
     filepath : str
         The destination path for the .onnx file.
-        
+
     Returns
     -------
     tuple[bool, str]
@@ -33,7 +32,7 @@ def export_to_onnx(model: nn.Module, dummy_tensor: torch.Tensor, filepath: str) 
         # We ensure both the model and the dummy tensor are on CPU
         model_cpu = model.to('cpu')
         dummy_tensor_cpu = dummy_tensor.to('cpu')
-        
+
         torch.onnx.export(
             model_cpu,
             dummy_tensor_cpu,

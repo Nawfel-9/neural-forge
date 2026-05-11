@@ -8,10 +8,10 @@ and lets the user suppress future appearances with "Don't show again".
 
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QCheckBox, QFrame, QScrollArea, QWidget, QGraphicsDropShadowEffect,
+    QCheckBox, QFrame, QScrollArea, QWidget,
 )
-from PyQt6.QtCore import Qt, QSettings, QPropertyAnimation, QEasingCurve, QRect
-from PyQt6.QtGui import QColor, QFont, QIcon
+from PyQt6.QtCore import Qt, QSettings, QPropertyAnimation, QEasingCurve
+from PyQt6.QtGui import QFont
 
 
 # ── Reusable "file-row" component ─────────────────────────────────────────────
@@ -287,7 +287,7 @@ class ProjectGuideDialog(QDialog):
         ))
         content_layout.addWidget(FileRow(
             "logs/",        "dir",
-            "Optional — place your custom log files here. The terminal panel will tail them live.",
+            "Optional — reserve this folder for custom run logs in future Developer Mode execution.",
             required=False,
         ))
 

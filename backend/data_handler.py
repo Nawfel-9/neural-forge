@@ -1,152 +1,362 @@
 """
 data_handler.py
 ===============
-Pandas-based data loading, cleaning, and splitting.
-
-This module is completely decoupled from the UI.  It receives file paths and
-config dicts and returns DataFrames / metadata — never touches Qt.
+Exhaustive data engineering backend for Neural Forge.
+Handles loading, profiling, cleaning, outliers, feature engineering, splitting, and export.
 """
 
 from __future__ import annotations
 
-from typing import Any
+import os
+import pickle
+from typing import Any, Dict, Tuple
 
 import numpy as np
 import pandas as pd
-from sklearn.model_selection import KFold, train_test_split
+from sklearn.model_selection import KFold, train_test_split, StratifiedKFold
+from sklearn.preprocessing import (
+    StandardScaler, MinMaxScaler, OneHotEncoder, LabelEncoder,
+    PowerTransformer,
+)
+from sklearn.impute import KNNImputer
+from sklearn.utils.class_weight import compute_class_weight
+from sklearn.decomposition import PCA
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Loading
-# ─────────────────────────────────────────────────────────────────────────────
-
-def load_csv(filepath: str, **kwargs: Any) -> pd.DataFrame:
-    """
-    Read a CSV file into a DataFrame with robust error handling.
-
-    Parameters
-    ----------
-    filepath : str
-        Path to the ``.csv`` file.
-    **kwargs
-        Forwarded to :func:`pandas.read_csv` (e.g. ``encoding``, ``sep``).
-
-    Returns
-    -------
-    pd.DataFrame
-
-    Raises
-    ------
-    FileNotFoundError
-        If the file does not exist.
-    pd.errors.EmptyDataError
-        If the file is empty.
-    pd.errors.ParserError
-        If the CSV is malformed.
-    ValueError
-        If the file has no columns or is otherwise unusable.
-    """
-    df = pd.read_csv(filepath, **kwargs)
-    if df.empty or df.shape[1] == 0:
-        raise ValueError(
-            f"The file '{filepath}' was loaded but contains no usable data."
-        )
-    return df
-
+try:
+    from imblearn.over_sampling import SMOTE
+    from imblearn.under_sampling import RandomUnderSampler
+    IMBLEARN_AVAILABLE = True
+except ImportError:
+    IMBLEARN_AVAILABLE = False
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Cleaning
+# Loading & Profiling
 # ─────────────────────────────────────────────────────────────────────────────
 
 class NaNStrategy:
-    """Enum-like constants for NaN handling."""
+    """Compatibility constants for simple dataframe cleaning."""
+
     FILL_MEAN = "fill_mean"
     DROP_ROWS = "drop_rows"
 
 
-def clean_dataframe(
-    df: pd.DataFrame,
-    nan_strategy: str = NaNStrategy.FILL_MEAN,
-) -> tuple[pd.DataFrame, dict]:
-    """
-    Handle missing values and return a cleaned copy.
+def load_data(filepath: str) -> pd.DataFrame:
+    """Load CSV (auto-separator) or Parquet."""
+    ext = os.path.splitext(filepath)[1].lower()
+    if ext == '.csv':
+        # sep=None with engine='python' enables auto-detection
+        df = pd.read_csv(filepath, sep=None, engine='python')
+    elif ext == '.parquet':
+        df = pd.read_parquet(filepath)
+    else:
+        raise ValueError(f"Unsupported file extension: {ext}")
 
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Raw dataframe (not modified in place).
-    nan_strategy : str
-        ``"fill_mean"`` fills numeric NaNs with column means and
-        non-numeric NaNs with the mode; ``"drop_rows"`` drops any row
-        containing NaN.
+    if df.empty:
+        raise ValueError("The loaded dataset has no usable data.")
+    return df
 
-    Returns
-    -------
-    (cleaned_df, report)
-        ``report`` is a dict with keys ``nan_count_before``,
-        ``nan_count_after``, ``rows_before``, ``rows_after``,
-        ``strategy_used``.
-    """
-    report: dict[str, Any] = {
-        "nan_count_before": int(df.isna().sum().sum()),
-        "rows_before": len(df),
-        "strategy_used": nan_strategy,
-    }
 
-    cleaned = df.copy()
+def load_csv(filepath: str, **kwargs) -> pd.DataFrame:
+    """Load a CSV file and reject files with no usable data rows."""
+    df = pd.read_csv(filepath, **kwargs)
+    if df.empty:
+        raise ValueError("CSV contains no usable data.")
+    return df
+
+
+def get_profile(df: pd.DataFrame) -> pd.DataFrame:
+    """Return statistical profile of the dataframe."""
+    stats = df.describe(include='all').T
+    stats['nan_count'] = df.isna().sum()
+    stats['nan_pct'] = (stats['nan_count'] / len(df)) * 100
+    stats['dtype'] = df.dtypes
+
+    # Skewness for numeric columns
+    numeric_cols = df.select_dtypes(include=[np.number]).columns
+    stats['skewness'] = np.nan
+    for col in numeric_cols:
+        stats.at[col, 'skewness'] = df[col].skew()
+
+    return stats
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Cleaning & Outliers
+# ─────────────────────────────────────────────────────────────────────────────
+
+def handle_nan(df: pd.DataFrame, strategy: str, constant_val: Any = None) -> pd.DataFrame:
+    """Handle missing values."""
+    df = df.copy()
+    if strategy == 'drop':
+        return df.dropna().reset_index(drop=True)
+
+    for col in df.columns:
+        if df[col].isna().any():
+            if strategy == 'mean' and pd.api.types.is_numeric_dtype(df[col]):
+                df[col] = df[col].fillna(df[col].mean())
+            elif strategy == 'mean':
+                mode_val = df[col].mode()
+                fill_value = mode_val[0] if not mode_val.empty else "UNKNOWN"
+                df[col] = df[col].fillna(fill_value)
+            elif strategy == 'median' and pd.api.types.is_numeric_dtype(df[col]):
+                df[col] = df[col].fillna(df[col].median())
+            elif strategy == 'mode':
+                mode_val = df[col].mode()
+                if not mode_val.empty:
+                    df[col] = df[col].fillna(mode_val[0])
+            elif strategy == 'constant':
+                df[col] = df[col].fillna(constant_val)
+
+    if strategy == 'knn':
+        num_cols = df.select_dtypes(include=[np.number]).columns
+        if len(num_cols) > 0:
+            imputer = KNNImputer(n_neighbors=5)
+            df[num_cols] = imputer.fit_transform(df[num_cols])
+
+    return df
+
+
+def clean_dataframe(df: pd.DataFrame, nan_strategy: str) -> tuple[pd.DataFrame, dict]:
+    """Clean a dataframe and return a small before/after report."""
+    rows_before = len(df)
+    nan_before = int(df.isna().sum().sum())
 
     if nan_strategy == NaNStrategy.FILL_MEAN:
-        # Numeric columns → fill with column mean
-        num_cols = cleaned.select_dtypes(include=[np.number]).columns
-        for col in num_cols:
-            if cleaned[col].isna().any():
-                cleaned[col] = cleaned[col].fillna(cleaned[col].mean())
-
-        # Non-numeric columns → fill with mode (most frequent value)
-        cat_cols = cleaned.select_dtypes(exclude=[np.number]).columns
-        for col in cat_cols:
-            if cleaned[col].isna().any():
-                mode_val = cleaned[col].mode()
-                fill = mode_val.iloc[0] if not mode_val.empty else "UNKNOWN"
-                cleaned[col] = cleaned[col].fillna(fill)
-
+        cleaned = handle_nan(df, "mean")
     elif nan_strategy == NaNStrategy.DROP_ROWS:
-        cleaned = cleaned.dropna().reset_index(drop=True)
+        cleaned = handle_nan(df, "drop")
+    else:
+        raise ValueError(f"Unknown NaN strategy: {nan_strategy}")
 
-    report["nan_count_after"] = int(cleaned.isna().sum().sum())
-    report["rows_after"] = len(cleaned)
+    report = {
+        "nan_count_before": nan_before,
+        "nan_count_after": int(cleaned.isna().sum().sum()),
+        "rows_before": rows_before,
+        "rows_after": len(cleaned),
+        "strategy_used": nan_strategy,
+    }
     return cleaned, report
 
 
+def handle_outliers(df: pd.DataFrame, columns: list[str], method: str = 'iqr', action: str = 'clip') -> pd.DataFrame:
+    """Detect and handle outliers using IQR or Z-Score."""
+    df = df.copy()
+    for col in columns:
+        if not pd.api.types.is_numeric_dtype(df[col]):
+            continue
+
+        if method == 'iqr':
+            Q1 = df[col].quantile(0.25)
+            Q3 = df[col].quantile(0.75)
+            IQR = Q3 - Q1
+            lower = Q1 - 1.5 * IQR
+            upper = Q3 + 1.5 * IQR
+        else: # z-score
+            mean = df[col].mean()
+            std = df[col].std()
+            lower = mean - 3 * std
+            upper = mean + 3 * std
+
+        if action == 'clip':
+            df[col] = df[col].clip(lower, upper)
+        else: # remove
+            df = df[(df[col] >= lower) & (df[col] <= upper)]
+
+    return df.reset_index(drop=True)
+
 # ─────────────────────────────────────────────────────────────────────────────
-# Feature detection
+# Feature Engineering
 # ─────────────────────────────────────────────────────────────────────────────
 
-def detect_columns(df: pd.DataFrame) -> list[str]:
-    """Return the list of column names."""
-    return list(df.columns)
+def cyclical_encode(df: pd.DataFrame, column: str, max_val: float) -> pd.DataFrame:
+    """Encode periodic features (hour, day) into sin/cos components."""
+    df = df.copy()
+    df[f'{column}_sin'] = np.sin(2 * np.pi * df[column] / max_val)
+    df[f'{column}_cos'] = np.cos(2 * np.pi * df[column] / max_val)
+    return df
 
+def add_lags(df: pd.DataFrame, columns: list[str], n_lags: int) -> pd.DataFrame:
+    """Create lag features for time-series."""
+    df = df.copy()
+    for col in columns:
+        for i in range(1, n_lags + 1):
+            df[f'{col}_lag_{i}'] = df[col].shift(i)
+    return df.dropna().reset_index(drop=True)
 
-def count_input_features(df: pd.DataFrame, target_column: str) -> int:
+def parse_datetime_features(df: pd.DataFrame, columns: list[str]) -> pd.DataFrame:
+    """Extract Year, Month, Day, DayOfWeek, and IsWeekend from string dates."""
+    df = df.copy()
+    for col in columns:
+        if col in df.columns:
+            # Coerce errors to NaT to avoid crashing on bad data
+            dt_series = pd.to_datetime(df[col], errors='coerce')
+            df[f'{col}_year'] = dt_series.dt.year
+            df[f'{col}_month'] = dt_series.dt.month
+            df[f'{col}_day'] = dt_series.dt.day
+            df[f'{col}_dayofweek'] = dt_series.dt.dayofweek
+            df[f'{col}_is_weekend'] = dt_series.dt.dayofweek.isin([5, 6]).astype(int)
+            # Drop the original string column
+            df = df.drop(columns=[col])
+    return df
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Pipeline & Preprocessing
+# ─────────────────────────────────────────────────────────────────────────────
+
+class DataPipeline:
+    """Encapsulates all transformations for reproduction in production."""
+    def __init__(self):
+        self.scalers = {}
+        self.encoders = {}
+        self.transformers = {}
+        self.target_encoder = None
+        self.feature_columns = []
+        self.target_column = ""
+        self.pca = None
+
+    def save(self, path: str):
+        with open(path, 'wb') as f:
+            pickle.dump(self, f)
+
+    @staticmethod
+    def load(path: str) -> DataPipeline:
+        with open(path, 'rb') as f:
+            return pickle.load(f)
+
+def apply_preprocessing(df: pd.DataFrame, target: str, config: dict) -> Tuple[pd.DataFrame, DataPipeline]:
+    """Apply scaling, encoding, and distribution transforms."""
+    df = df.copy()
+    pipeline = DataPipeline()
+    pipeline.target_column = target
+
+    # 1. Feature Selection
+    excluded = [c for c in config.get('exclude_columns', []) if c != target and c in df.columns]
+    if excluded:
+        df = df.drop(columns=excluded)
+    feature_cols = [c for c in df.columns if c != target and c not in excluded]
+    pipeline.feature_columns = feature_cols
+
+    # 2. Categorical Encoding
+    cat_cols = df[feature_cols].select_dtypes(exclude=[np.number]).columns
+    for col in cat_cols:
+        enc = OneHotEncoder(handle_unknown='ignore', sparse_output=False)
+        encoded_data = enc.fit_transform(df[[col]])
+        new_cols = [f"{col}_{cat}" for cat in enc.categories_[0]]
+        encoded_df = pd.DataFrame(encoded_data, columns=new_cols, index=df.index)
+        df = pd.concat([df.drop(columns=[col]), encoded_df], axis=1)
+        pipeline.encoders[col] = enc
+
+    # Update feature list after encoding
+    feature_cols = [c for c in df.columns if c != target]
+
+    # 3. Target Encoding (if classification and string)
+    if not pd.api.types.is_numeric_dtype(df[target]):
+        le = LabelEncoder()
+        df[target] = le.fit_transform(df[target])
+        pipeline.target_encoder = le
+
+    # 4. Distribution Transforms
+    power_cols = config.get('power_transform_columns', [])
+    for col in power_cols:
+        if col in df.columns:
+            pt = PowerTransformer(method='yeo-johnson')
+            df[col] = pt.fit_transform(df[[col]])
+            pipeline.transformers[f'power_{col}'] = pt
+
+    # 5. Scaling
+    scale_method = config.get('scaling', 'standard')
+    num_cols = df[feature_cols].select_dtypes(include=[np.number]).columns
+    if scale_method == 'standard':
+        scaler = StandardScaler()
+    else:
+        scaler = MinMaxScaler()
+
+    if len(num_cols) > 0:
+        df[num_cols] = scaler.fit_transform(df[num_cols])
+        pipeline.scalers['main'] = scaler
+
+    # 6. PCA (Dimensionality Reduction)
+    if config.get('pca_enabled', False):
+        n_comp = config.get('pca_components', 0.95)
+        pca = PCA(n_components=n_comp)
+        # Apply PCA only to numeric features
+        num_features = [c for c in df.columns if c != target and pd.api.types.is_numeric_dtype(df[c])]
+        pca_data = pca.fit_transform(df[num_features])
+        new_cols = [f"pca_comp_{i}" for i in range(pca_data.shape[1])]
+        pca_df = pd.DataFrame(pca_data, columns=new_cols, index=df.index)
+
+        # Drop old numeric features and keep target/others
+        others = [c for c in df.columns if c not in num_features]
+        df = pd.concat([df[others], pca_df], axis=1)
+        pipeline.pca = pca
+
+    pipeline.feature_columns = [c for c in df.columns if c != target]
+    return df, pipeline
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Advanced Feature Discovery & Validation
+# ─────────────────────────────────────────────────────────────────────────────
+
+def calculate_correlation_matrix(df: pd.DataFrame) -> pd.DataFrame:
+    """Return the correlation matrix for numeric columns."""
+    return df.select_dtypes(include=[np.number]).corr()
+
+def detect_target_leakage(df: pd.DataFrame, target: str, threshold: float = 0.95) -> list[str]:
+    """Identify columns with suspiciously high correlation to the target."""
+    if not pd.api.types.is_numeric_dtype(df[target]):
+        return []
+
+    corr_matrix = df.select_dtypes(include=[np.number]).corr()
+    target_corr = corr_matrix[target].abs().sort_values(ascending=False)
+    # Exclude target itself and return leaky ones
+    leaky = target_corr[(target_corr > threshold) & (target_corr.index != target)].index.tolist()
+    return leaky
+
+def apply_feature_interaction(df: pd.DataFrame, col1: str, col2: str, op: str) -> pd.DataFrame:
+    """Create a new feature via mathematical interaction."""
+    df = df.copy()
+    new_name = f"{col1}_{op}_{col2}"
+    if op == 'add':
+        df[new_name] = df[col1] + df[col2]
+    elif op == 'sub':
+        df[new_name] = df[col1] - df[col2]
+    elif op == 'mul':
+        df[new_name] = df[col1] * df[col2]
+    elif op == 'div':
+        df[new_name] = df[col1] / df[col2].replace(0, np.nan)
+    return df
+
+def validate_domain_constraints(df: pd.DataFrame, constraints: list[dict]) -> dict:
     """
-    Count the number of input features (all columns except the target).
-
-    Raises
-    ------
-    ValueError
-        If the target column is not found.
+    Check domain rules.
+    Constraint example: {'column': 'pH', 'op': 'range', 'min': 0, 'max': 14}
     """
-    if target_column not in df.columns:
-        raise ValueError(
-            f"Target column '{target_column}' not found. "
-            f"Available columns: {list(df.columns)}"
-        )
-    return df.shape[1] - 1
+    report = {"errors": [], "success": True}
+    for c in constraints:
+        col = c['column']
+        if col not in df.columns: continue
 
+        op = c['op']
+        if op == 'greater':
+            invalid = df[df[col] <= c['val']]
+        elif op == 'less':
+            invalid = df[df[col] >= c['val']]
+        elif op == 'range':
+            invalid = df[(df[col] < c['min']) | (df[col] > c['max'])]
+        else:
+            continue
+
+        if not invalid.empty:
+            report["errors"].append(f"Constraint {op} failed for {col}: {len(invalid)} violations.")
+            report["success"] = False
+
+    return report
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Splitting
+# Compatibility Shims
 # ─────────────────────────────────────────────────────────────────────────────
+
+def get_kfold_splitter(k: int = 5, shuffle: bool = True, random_state: int = 42) -> KFold:
+    return KFold(n_splits=k, shuffle=shuffle, random_state=random_state)
 
 def split_data_percentage(
     df: pd.DataFrame,
@@ -154,36 +364,78 @@ def split_data_percentage(
     ratio: float = 0.8,
     random_state: int = 42,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series]:
-    """
-    Split into train/validation sets by percentage.
-
-    Returns
-    -------
-    (X_train, X_val, y_train, y_val)
-    """
     if target_column not in df.columns:
-        raise ValueError(f"Target column '{target_column}' not in DataFrame.")
-
+        raise ValueError(f"Target column '{target_column}' not found.")
     X = df.drop(columns=[target_column])
     y = df[target_column]
+    return train_test_split(X, y, train_size=ratio, random_state=random_state)
 
-    X_train, X_val, y_train, y_val = train_test_split(
-        X, y, train_size=ratio, random_state=random_state,
-    )
-    return X_train, X_val, y_train, y_val
+def detect_columns(df: pd.DataFrame) -> list[str]:
+    return list(df.columns)
 
+def count_input_features(df: pd.DataFrame, target_column: str) -> int:
+    if target_column not in df.columns:
+        raise ValueError(f"Target column '{target_column}' not found.")
+    return df.shape[1] - 1
 
-def get_kfold_splitter(k: int = 5, shuffle: bool = True, random_state: int = 42) -> KFold:
-    """
-    Return a configured KFold splitter (used by the training loop later).
+# ─────────────────────────────────────────────────────────────────────────────
+# Splitting & Export
+# ─────────────────────────────────────────────────────────────────────────────
 
-    Parameters
-    ----------
-    k : int
-        Number of folds.
+def split_data(df: pd.DataFrame, target: str, config: dict) -> Dict[str, Any]:
+    """Split data with support for stratification and resampling."""
+    X = df.drop(columns=[target])
+    y = df[target]
 
-    Returns
-    -------
-    sklearn.model_selection.KFold
-    """
-    return KFold(n_splits=k, shuffle=shuffle, random_state=random_state)
+    method = config.get('method', 'percentage')
+    stratify = y if config.get('stratify', False) else None
+
+    if method == 'percentage':
+        test_size = config.get('test_size', 0.2)
+        val_size = config.get('val_size', 0.1)
+
+        X_train_full, X_test, y_train_full, y_test = train_test_split(
+            X, y, test_size=test_size, stratify=stratify, random_state=42
+        )
+
+        # Further split train into train/val
+        X_train, X_val, y_train, y_val = train_test_split(
+            X_train_full, y_train_full, test_size=val_size/(1-test_size),
+            stratify=y_train_full if stratify is not None else None, random_state=42
+        )
+
+        # Resampling (only on training set)
+        resample = config.get('resample', None)
+        if resample and IMBLEARN_AVAILABLE:
+            if resample == 'smote':
+                X_train, y_train = SMOTE().fit_resample(X_train, y_train)
+            elif resample == 'undersample':
+                X_train, y_train = RandomUnderSampler().fit_resample(X_train, y_train)
+
+        return {
+            'train': (X_train, y_train),
+            'val': (X_val, y_val),
+            'test': (X_test, y_test)
+        }
+    else: # K-Fold
+        k = config.get('k', 5)
+        kf = StratifiedKFold(n_splits=k) if stratify is not None else KFold(n_splits=k)
+        return {'kfold': kf, 'X': X, 'y': y}
+
+def calculate_class_weights(y: pd.Series) -> torch.Tensor:
+    """Calculate weights for imbalanced classification."""
+    import torch
+
+    classes = np.unique(y)
+    weights = compute_class_weight(class_weight='balanced', classes=classes, y=y)
+    return torch.tensor(weights, dtype=torch.float32)
+
+def to_dataloader(X: pd.DataFrame, y: pd.Series, batch_size: int = 32, shuffle: bool = True):
+    """Convert Pandas data to PyTorch DataLoader."""
+    import torch
+    from torch.utils.data import DataLoader, TensorDataset
+
+    X_tensor = torch.tensor(X.values, dtype=torch.float32)
+    y_tensor = torch.tensor(y.values, dtype=torch.long if y.dtype == int else torch.float32)
+    dataset = TensorDataset(X_tensor, y_tensor)
+    return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle)

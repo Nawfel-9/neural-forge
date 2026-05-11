@@ -23,5 +23,11 @@ Thumbs.db
 
 # Saved models
 *.onnx
+*.onnx.data
 *.pt
 *.pth
+*.pkl
+
+# Local scratch/data exports
+/12.json
+/Advertising.csv

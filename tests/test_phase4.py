@@ -22,10 +22,12 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
-import torch
-import torch.nn as nn
-from PyQt6.QtCore import QEventLoop
-from PyQt6.QtWidgets import QApplication
+
+nn = pytest.importorskip("torch.nn")
+qt_core = pytest.importorskip("PyQt6.QtCore")
+qt_widgets = pytest.importorskip("PyQt6.QtWidgets")
+QEventLoop = qt_core.QEventLoop
+QApplication = qt_widgets.QApplication
 
 # Ensure project root is on sys.path
 ROOT = Path(__file__).resolve().parent.parent

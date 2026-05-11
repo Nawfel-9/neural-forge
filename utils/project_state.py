@@ -15,7 +15,13 @@ from typing import Any, Optional
 
 import pandas as pd
 
-from backend.training_config import DEFAULT_LOSS, DEFAULT_OPTIMIZER
+try:
+    from backend.training_config import DEFAULT_LOSS, DEFAULT_OPTIMIZER
+except ModuleNotFoundError as exc:
+    if exc.name != "torch":
+        raise
+    DEFAULT_LOSS = {"classification": "CrossEntropyLoss", "regression": "MSELoss"}
+    DEFAULT_OPTIMIZER = "Adam"
 
 
 @dataclass
@@ -26,6 +32,7 @@ class ProjectState:
     dataframe: Optional[pd.DataFrame] = None
     target_column: str = ""
     problem_type: str = "classification"  # "classification" | "regression"
+    pipeline: Any = None  # Stores the preprocessing DataPipeline
     split_config: dict = field(
         default_factory=lambda: {"method": "percentage", "ratio": 0.8}
     )
@@ -48,6 +55,9 @@ class ProjectState:
     device: str = "cpu"              # "cpu" | "cuda" | "mps"
     loss_fn_name: str = field(default_factory=lambda: DEFAULT_LOSS["classification"])
     optimizer_name: str = field(default_factory=lambda: DEFAULT_OPTIMIZER)
+
+    # ---- Developer Mode ----
+    dev_project_path: str = ""        # Imported PyTorch project folder
 
     # ---- Convenience ----
     def input_features(self) -> int:

@@ -30,7 +30,6 @@ LAYER_TYPES = [
     "Dropout",
 ]
 ACTIVATIONS = ["None", "ReLU", "Sigmoid", "Tanh", "LeakyReLU", "Softmax"]
-PADDING_MODES = ["zeros", "reflect", "replicate", "circular"]
 
 
 class LayerRow(QFrame):
@@ -94,7 +93,7 @@ class LayerRow(QFrame):
         self.spin_neurons = QSpinBox()
         self.spin_neurons.setRange(1, 10_000)
         self.spin_neurons.setValue(64)
-        self.spin_neurons.setFixedWidth(90)
+        self.spin_neurons.setFixedWidth(100)
         layout.addWidget(self.spin_neurons)
 
         self.lbl_activation = QLabel("Activation:")
@@ -110,7 +109,7 @@ class LayerRow(QFrame):
         self.spin_out_channels = QSpinBox()
         self.spin_out_channels.setRange(1, 2048)
         self.spin_out_channels.setValue(32)
-        self.spin_out_channels.setFixedWidth(80)
+        self.spin_out_channels.setFixedWidth(90)
         layout.addWidget(self.spin_out_channels)
 
         # ── Shared: kernel_size (Conv1d, MaxPool1d, AvgPool1d) ──────────────
@@ -119,7 +118,7 @@ class LayerRow(QFrame):
         self.spin_kernel = QSpinBox()
         self.spin_kernel.setRange(1, 99)
         self.spin_kernel.setValue(3)
-        self.spin_kernel.setFixedWidth(60)
+        self.spin_kernel.setFixedWidth(70)
         layout.addWidget(self.spin_kernel)
 
         # ── Shared: stride (Conv1d, MaxPool1d, AvgPool1d) ───────────────────
@@ -128,7 +127,7 @@ class LayerRow(QFrame):
         self.spin_stride = QSpinBox()
         self.spin_stride.setRange(1, 99)
         self.spin_stride.setValue(1)
-        self.spin_stride.setFixedWidth(60)
+        self.spin_stride.setFixedWidth(70)
         layout.addWidget(self.spin_stride)
 
         # ── Conv1d padding ──────────────────────────────────────────────────
@@ -137,7 +136,7 @@ class LayerRow(QFrame):
         self.spin_padding = QSpinBox()
         self.spin_padding.setRange(0, 49)
         self.spin_padding.setValue(0)
-        self.spin_padding.setFixedWidth(60)
+        self.spin_padding.setFixedWidth(70)
         layout.addWidget(self.spin_padding)
 
         # ── Dropout rate ────────────────────────────────────────────────────
@@ -147,14 +146,14 @@ class LayerRow(QFrame):
         self.spin_dropout.setRange(0.0, 1.0)
         self.spin_dropout.setSingleStep(0.05)
         self.spin_dropout.setValue(0.3)
-        self.spin_dropout.setFixedWidth(80)
+        self.spin_dropout.setFixedWidth(90)
         layout.addWidget(self.spin_dropout)
 
         # Spacer to push remove button to the right
         layout.addStretch()
 
         # Remove button
-        self.btn_remove = QPushButton("✕")
+        self.btn_remove = QPushButton("×")
         self.btn_remove.setProperty("class", "danger")
         self.btn_remove.setFixedSize(32, 32)
         self.btn_remove.setToolTip("Remove this layer")
@@ -224,7 +223,7 @@ class LayerRow(QFrame):
             if idx >= 0:
                 self.combo_type.setCurrentIndex(idx)
             self.spin_neurons.setValue(num_classes)
-            
+
             # Disable editing
             self.combo_type.setEnabled(False)
             self.spin_neurons.setEnabled(False)

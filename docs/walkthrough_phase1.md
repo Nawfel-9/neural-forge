@@ -224,24 +224,20 @@ The `"version": 1` field future-proofs the format for adding metadata later.
 
 ---
 
-## 7. `main.py` — Entry Point & Pipeline Controller
+## 7. `main.py` — Entry Point & App Shell
 
 ```python
-class PipelineController:
-    def start(self):            # Show Home View
-    def _open_data_window(self):   # Switch to Data View
-    def _open_model_window(self):  # Switch to Model View
-    def _back_to_data(self):       # Switch back to Data
+class NeuralForgeApp(QMainWindow):
+    def _switch_tab(self, index: int):  # Switch QStackedWidget page
+    def _start_no_code_pipeline(self):  # Home -> Data Lab
+    def _open_dev_mode(self):           # Guide -> folder picker -> status page
 ```
 
 ```python
 def main():
     app = QApplication(sys.argv)
-    apply_dark_palette(app)          # Dark QPalette
-    app.setStyleSheet(DARK_QSS)      # Dark QSS
-    state = ProjectState()
-    controller = PipelineController(state)
-    controller.start()               # → Window 1
+    window = NeuralForgeApp()
+    window.show()
     sys.exit(app.exec())
 ```
 

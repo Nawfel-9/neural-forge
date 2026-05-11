@@ -22,7 +22,7 @@ class MonitorPanel(QLabel):
         super().__init__(parent)
         self.setStyleSheet("color: #8b949e; font-family: monospace; font-size: 13px;")
         self.setText("CPU: 0% | RAM: 0% | VRAM: N/A")
-        
+
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._update_resources)
 
@@ -38,7 +38,7 @@ class MonitorPanel(QLabel):
     def _update_resources(self) -> None:
         cpu = psutil.cpu_percent()
         ram = psutil.virtual_memory().percent
-        
+
         vram_str = "N/A"
         if torch.cuda.is_available():
             # Allocated memory in MB
